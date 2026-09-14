@@ -1,4 +1,5 @@
 #include "prj.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -24,6 +25,10 @@ int main(int argc,char** argv) { try {
     d.duplicate_instance(0); check(d.field(1,0x90)==0xdeadbeef,"Unknown field preservation");
     d.remove_instance(0); check(int32_t(d.field(0,0x10))==-1536,"Signed position");
     d.set_music("battle1.fsm"); check(d.music()=="battle1.fsm","Music");
+    prj::Trace trace;trace.data={0,4,0,0,17,0,0,0,34,0,0,0};d.set_trace(trace);
+    auto decoded_trace=d.trace();check(decoded_trace && decoded_trace->marker==2 && decoded_trace->cadence==6 && decoded_trace->data==trace.data,"TRAC decode");
+    auto invalid_trace=d;const std::array<uint8_t,4> trac_tag={'T','R','A','C'};auto trace_pos=std::search(invalid_trace.tail.begin(),invalid_trace.tail.end(),trac_tag.begin(),trac_tag.end());
+    prj::put32(invalid_trace.tail,size_t(trace_pos-invalid_trace.tail.begin())+4,3);rejects([&]{prj::Document::decode(invalid_trace.encode());});
     check(prj::Document::decode(d.encode()).encode()==d.encode(),"Edited round trip");
     for(size_t n=0;n<original.size();++n) {
         // Opaque trailing bytes may be missing; structured chunks may not.
@@ -41,6 +46,7 @@ int main(int argc,char** argv) { try {
         std::ifstream input(path,std::ios::binary);
         prj::Bytes source((std::istreambuf_iterator<char>(input)),std::istreambuf_iterator<char>());
         auto raw=level.encode(); check(raw==source,"Unmodified file must match original bytes"); check(prj::Document::decode(raw).encode()==raw,"Real level round trip");
+        auto trace=level.trace();check(trace && trace->marker==2 && trace->cadence==6 && !trace->data.empty(),"Original TRAC block");
         auto original_level=level;
         auto h=level.elevation(0,0,0); level.set_elevation(0,0,0,h);
         check(level.encode()==raw,"No-op height edit must preserve bytes");

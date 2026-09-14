@@ -142,7 +142,8 @@ void Editor::refresh() {
     }
     base_entry.set_text(display_name(doc.mesh())); water_entry.set_text(display_name(doc.mesh(true))); music_entry.set_text(display_name(doc.music())); music_entry.set_sensitive(doc.has_music());
     terrain_info.set_text(std::to_string(doc.width())+" × "+std::to_string(doc.height())+" height cells\n"+std::to_string(doc.attr_width())+" × "+std::to_string(doc.attr_height())+" attribute cells\nTwo independent height layers");
-    file_info.set_text(std::to_string(doc.instance_count())+" furniture instances\n"+std::to_string(doc.tail.size())+" preserved trailer bytes");
+    auto trace=doc.trace();
+    file_info.set_text(std::to_string(doc.instance_count())+" furniture instances\n"+std::to_string(doc.tail.size())+" preserved trailer bytes"+(trace?"\n"+std::to_string(trace->data.size())+" TRAC camera-track bytes":""));
     updating=false; sync_properties(); canvas.invalidate(); scene.sync(); asset_entry.set_text(asset_directory); update_title();
     status("Ready • "+std::to_string(doc.width())+" × "+std::to_string(doc.height())+" • Select a tool or open a PRJ");
 }

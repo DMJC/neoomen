@@ -37,6 +37,12 @@ size_t music_offset(const Bytes& b) {
     auto p=std::search(b.begin(),b.end(),tag.begin(),tag.end());
     return p==b.end() || size_t(b.end()-p)<24 ? b.size() : size_t(p-b.begin());
 }
+size_t tag_offset(const Bytes& b,const char* tag,size_t begin=0) {
+    const std::array<uint8_t,4> needle={uint8_t(tag[0]),uint8_t(tag[1]),uint8_t(tag[2]),uint8_t(tag[3])};
+    if(begin>b.size())return b.size();
+    auto p=std::search(b.begin()+begin,b.end(),needle.begin(),needle.end());
+    return p==b.end()?b.size():size_t(p-b.begin());
+}
 size_t patch_pos(const Document& d, unsigned l, uint32_t x, uint32_t y) {
     need(l<2 && x<d.width() && y<d.height(),"Terrain cell out of range");
     return 28+8*(size_t(l)*d.patch_count()+(y/8)*((d.width()+7)/8)+x/8);
@@ -87,6 +93,7 @@ Document Document::decode(const Bytes& bytes) {
     need(size>=8+packed,"ATTR size is shorter than its grid");
     r.skip(size_t(size)-8); d.attributes=r.slice(start);
     d.tail=Bytes(bytes.begin()+r.p,bytes.end());
+    (void)d.trace();
     return d;
 }
 Document Document::open(const std::string& path) {
@@ -218,5 +225,24 @@ void Document::set_music(const std::string& s) {
     need(s.size()<=19 && s.find('\0')==std::string::npos,"Music cue must fit 19 bytes plus terminator");
     auto p=music_offset(tail); need(p!=tail.size(),"No complete MUSC field found in this template");
     std::fill(tail.begin()+p+4,tail.begin()+p+24,0); std::copy(s.begin(),s.end(),tail.begin()+p+4);
+}
+std::optional<Trace> Document::trace() const {
+    auto begin=tag_offset(tail,"TRAC");if(begin==tail.size())return std::nullopt;
+    auto end=tag_offset(tail,"EDIT",begin+4);if(end==tail.size())end=tail.size();
+    need(end>=begin+12,"Truncated TRAC block");
+    Trace out;out.marker=u32(tail,begin+4);out.cadence=u32(tail,begin+8);
+    need(out.marker==2,"Unsupported TRAC marker");need(out.cadence!=0,"Invalid TRAC cadence");
+    out.data=Bytes(tail.begin()+begin+12,tail.begin()+end);
+    return out;
+}
+void Document::set_trace(const Trace& value) {
+    need(value.marker==2,"Unsupported TRAC marker");need(value.cadence!=0,"TRAC cadence must be nonzero");
+    need(value.data.size()<=256u*1024u*1024u-12u,"TRAC payload is too large");
+    Bytes block=chunk("TRAC",value.marker);append32(block,value.cadence);
+    append(block,value.data);
+    auto begin=tag_offset(tail,"TRAC");auto end=tail.size();
+    if(begin!=tail.size()) {end=tag_offset(tail,"EDIT",begin+4);if(end==tail.size())end=tail.size();}
+    else {begin=tag_offset(tail,"EDIT");if(begin==tail.size())begin=tail.size();end=begin;}
+    tail.erase(tail.begin()+begin,tail.begin()+end);tail.insert(tail.begin()+begin,block.begin(),block.end());
 }
 }

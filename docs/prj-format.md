@@ -13,6 +13,7 @@ The reader checks the tags and walks **BASE → WATR → FURN → INST → TERR 
 | TERR | Tag, BSIZE, width, height, delta-block count, patch count, Layer1 byte count, two Layer1 arrays, Layer2 byte count, Layer2 array |
 | ATTR | Tag, BSIZE, width, height, packed nibbles; any extra BSIZE payload bytes retained |
 | Trailer | Everything after ATTR retained, including the observed 64 extra bytes and subsequent chunks |
+| TRAC | Trailer camera-track block: marker `2`, cadence `6`, then a variable-length payload up to `EDIT` |
 
 ## Additional local observations
 
@@ -23,7 +24,7 @@ The following were directly checked against **all 41 PRJs** under the installed 
 3. Several maps have negative Layer1 base heights encoded as signed 32-bit integers (including B1_04, B1_05, B2_01, B2_08 and B4_01). Height decoding uses signed base plus unsigned delta ×128. Byte counts and dictionary offsets remain unsigned.
 4. The reader reconstructs every installed file byte for byte. Tests edit one cell, check all other heights and the other layer, and check that the modified file can be parsed again.
 
-The B1_01 offsets used as an initial check are: BASE 32, WATR 49, FURN 69, INST 245, TERR 5885, ATTR 45389, EXCL 63869, MUSC 63945, TRAC 63969 and EDIT 67197. These offsets are test observations, **not hardcoded parser offsets**.
+The B1_01 offsets used as an initial check are: BASE 32, WATR 49, FURN 69, INST 245, TERR 5885, ATTR 45389, EXCL 63869, MUSC 63945, TRAC 63969 and EDIT 67197. These offsets are test observations, **not hardcoded parser offsets**. `TRAC` has a non-size marker field (`2` in the installed corpus), so its end is located at the following `EDIT` tag. The reader exposes its `6` cadence and preserves the variable-length payload exactly; the camera-transform record layout remains unverified.
 
 ## Editing guarantees
 

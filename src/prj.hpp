@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -7,6 +8,13 @@ namespace prj {
 using Bytes = std::vector<uint8_t>;
 uint32_t u32(const Bytes&, size_t);
 void put32(Bytes&, size_t, uint32_t);
+struct Trace {
+    uint32_t marker=2;
+    uint32_t cadence=6;
+    // The variable-length camera-track payload. Its inner record layout is
+    // not documented, so preserve it verbatim rather than mis-decoding it.
+    Bytes data;
+};
 struct Document {
     Bytes banner, base, water, furniture, instances, terrain, attributes, tail;
     static Document decode(const Bytes&);
@@ -38,5 +46,9 @@ struct Document {
     std::string music() const;
     bool has_music() const;
     void set_music(const std::string&);
+    // TRAC is an editor/camera-track block in the trailer, before EDIT.
+    // Missing blocks return nullopt. Unsupported or truncated blocks fail.
+    std::optional<Trace> trace() const;
+    void set_trace(const Trace&);
 };
 }
