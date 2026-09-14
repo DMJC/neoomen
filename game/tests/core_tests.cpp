@@ -45,6 +45,13 @@ int main(){try {
     // Local ID zero resolves table[bias]; entry one points to word three.
     word(ctl,4,3);neo::Battle scripted;scripted.reset(army,army,{},20);neo::BattleSetup scriptSetup;neo::BattleNode scriptNode;scriptNode.flags=2;scriptNode.unit_id=129;scriptSetup.nodes.push_back(scriptNode);
     scripted.attach_script(ctl,scriptSetup);check(scripted.scripts->states[0].registers[0]==0,"CTL deployment barrier");scripted.start();scripted.tick();check(scripted.scripts->states[0].registers[0]==7,"CTL register assignment");scripted.tick();check(scripted.scripts->states[0].registers[0]==7,"CTL timer suspension");scripted.tick();check(scripted.scripts->states[0].registers[0]==9,"CTL timer resume and arithmetic");scripted.tick();check(!scripted.scripts->states[0].active,"CTL termination");
+    neo::Army hostile=army;hostile.regiments[0].id=130;
+    unsigned charge_code[]={1,3,0,0x8000,0x8001,0x8058,0x805a,0x80f1};prj::Bytes charge_ctl(sizeof charge_code);for(unsigned i=0;i<sizeof charge_code/sizeof *charge_code;++i)word(charge_ctl,i*4,charge_code[i]);
+    neo::Battle charge_ai;charge_ai.reset(army,hostile,{},20);charge_ai.attach_script(charge_ctl,scriptSetup);charge_ai.start();charge_ai.tick();
+    check(charge_ai.units[0].target==1 && charge_ai.units[0].command==neo::UnitCommand::Charge && (charge_ai.scripts->states[0].flag3&0x80),"CTL charge opportunity and charge host");
+    auto bow=army;bow.regiments[0].missile_weapon=1;unsigned shoot_code[]={1,3,0,0x8000,0x8001,0x80ac,0,0,0,0x80f1};prj::Bytes shoot_ctl(sizeof shoot_code);for(unsigned i=0;i<sizeof shoot_code/sizeof *shoot_code;++i)word(shoot_ctl,i*4,shoot_code[i]);
+    neo::Battle shooting_ai;shooting_ai.reset(bow,hostile,{},20);shooting_ai.attach_script(shoot_ctl,scriptSetup);shooting_ai.start();shooting_ai.tick();
+    check(shooting_ai.units[0].target==1 && shooting_ai.units[0].command==neo::UnitCommand::Shoot && !shooting_ai.units[0].moving,"CTL search-and-shoot host");
     rejects([]{neo::CtlProgram bad({0,0,0});});word(ctl,4,999);rejects([&]{neo::CtlProgram bad(ctl);bad.function(0);});
     unsigned voice_code[]={1,3,0,0x80ae,37,0x80af,129,38,0x80ea,0x8015,0x80ea,0x80f1};
     prj::Bytes voice_ctl(sizeof voice_code);for(unsigned i=0;i<sizeof voice_code/sizeof *voice_code;++i)word(voice_ctl,i*4,voice_code[i]);

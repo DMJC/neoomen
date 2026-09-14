@@ -47,7 +47,20 @@ void CtlRuntime::run(Battle& battle,size_t index) {
     auto global=[&](uint32_t r)->int32_t& {if(r>=globals.size())throw std::runtime_error("CTL global index");return globals[r];};
     auto node=[&](uint32_t n)->const BattleNode& {if(n>=setup.nodes.size())throw std::runtime_error("CTL node index");return setup.nodes[n];};
     auto find_unit=[&](uint32_t id){for(size_t i=0;i<battle.units.size();++i)if(battle.units[i].regiment.id==id)return int(i);return -1;};
-    auto search=[&](float radius){int target=-1;float nearest=radius;for(size_t j=0;j<battle.units.size();++j){const auto& other=battle.units[j];if(other.enemy==unit.enemy || !other.regiment.alive || other.routing)continue;auto delta=other.position-unit.position;delta.y=0;float d=length(delta);if(d<nearest){nearest=d;target=int(j);}}if(target>=0){unit.target=target;unit.moving=true;}condition(target>=0);return target;};
+    auto search=[&](float radius){int target=-1;float nearest=radius;for(size_t j=0;j<battle.units.size();++j){const auto& other=battle.units[j];if(other.enemy==unit.enemy || !other.regiment.alive || other.routing)continue;auto delta=other.position-unit.position;delta.y=0;float d=length(delta);if(d<nearest){nearest=d;target=int(j);}}condition(target>=0);return target;};
+    auto valid_target=[&](int target){return target>=0 && size_t(target)<battle.units.size() && battle.units[size_t(target)].enemy!=unit.enemy && battle.units[size_t(target)].regiment.alive && !battle.units[size_t(target)].routing;};
+    auto face_target=[&](int target){if(!valid_target(target))return false;auto delta=battle.units[size_t(target)].position-unit.position;delta.y=0;if(length(delta)<=.001f)return false;unit.heading=std::atan2(delta.x,delta.z);return true;};
+    auto engage=[&](int target,bool charge,bool shooting){
+        if(!valid_target(target))return false;
+        unit.target=target;unit.destination=battle.units[size_t(target)].position;unit.command=shooting?UnitCommand::Shoot:charge?UnitCommand::Charge:UnitCommand::Automatic;
+        unit.moving=!shooting;unit.engaged=!shooting && length(unit.destination-unit.position)<5.f;
+        if(charge)unit.charge_time=8;
+        face_target(target);return true;
+    };
+    auto disengage=[&](bool retreat){
+        math3d::Vec3 away{0,0,unit.enemy?1.f:-1.f};if(valid_target(unit.target)){away=normal(unit.position-battle.units[size_t(unit.target)].position);away.y=0;}
+        unit.target=-1;unit.engaged=false;unit.command=retreat?UnitCommand::Break:UnitCommand::Automatic;unit.destination=unit.position+away*(retreat?25.f:8.f);unit.moving=retreat;face_target(-1);
+    };
     if(!s.in_event && s.event_handler && !s.events.empty()) {push(s.ip);push(s.function);s.in_event=true;jump(s.event_handler);}
     for(unsigned budget=0;budget<4096;++budget) {
         auto base=program.function(s.function),at=base+s.ip;uint32_t op=program.word(at)&0xffff;
@@ -95,7 +108,7 @@ void CtlRuntime::run(Battle& battle,size_t index) {
             case 39:s.function=s.saved_function;s.ip=s.saved_ip;break;
             case 40:case 41:{const auto& p=node(a[0]);unit.destination={p.x/8.f,unit.position.y,p.z/8.f};unit.moving=true;unit.target=-1;break;}
             case 42:{auto it=std::find_if(setup.nodes.begin(),setup.nodes.end(),[&](const BattleNode& p){return p.group==a[0];});if(it!=setup.nodes.end()){unit.destination={it->x/8.f,unit.position.y,it->z/8.f};unit.moving=true;unit.target=-1;}break;}
-            case 43:case 101:unit.moving=false;unit.target=-1;break;
+            case 43:unit.moving=false;unit.target=-1;unit.engaged=false;break;
             case 44:if(wait((s.flag1&a[0])!=0))return;break;
             case 45:if(wait((s.flag1&a[0])==0))return;break;
             case 46:condition(s.flag1&a[0]);break;
@@ -119,12 +132,39 @@ void CtlRuntime::run(Battle& battle,size_t index) {
             case 64:s.stored=-1;for(size_t j=0;j<states.size();++j)if(states[j].label==a[0]){s.stored=int(j);break;}break;
             case 65:condition(std::any_of(states.begin(),states.end(),[&](const CtlState& st){return st.label==a[0];}));break;
             case 66:if(std::any_of(states.begin(),states.end(),[&](const CtlState& st){return st.label==a[0];}))send(index,{uint16_t(a[1]),int(index),{}});break;
+            case 67:{int target=search(176.f);if(target>=0){engage(target,false,false);s.flag1|=0x800u;}break;} // close-combat engage trigger
+            case 69:if(!valid_target(unit.target)){unit.target=-1;unit.engaged=false;}condition(unit.target>=0);break;
+            case 72:if(valid_target(unit.target))face_target(unit.target);break;
+            case 73:if(valid_target(unit.target)){unit.destination=battle.units[size_t(unit.target)].position;unit.moving=true;}break;
+            case 74:condition(valid_target(unit.target) && length(battle.units[size_t(unit.target)].position-unit.position)<=176.f);break;
+            case 75:{int target=valid_target(unit.target)?unit.target:search(176.f);condition(engage(target,false,false));break;}
             case 76:break;
-            case 82:break; // Individual-member wander: sprite formation remains host-owned.
-            case 83:{const auto& p=node(a[0]);if(p.flags&1){unit.position={p.x/8.f,unit.position.y,p.z/8.f};unit.destination=unit.position;unit.heading=p.heading*6.2831853f/512;unit.moving=false;}break;}
-            case 99:unit.cooldown=0;break;
-            case 103:unit.moving=false;break;
-            case 104:unit.heading+=int16_t(a[0])*6.2831853f/512;break;
+            case 77:{int target=search(176.f);if(engage(target,true,false))s.flag3|=0x80u;break;} // 0x4d
+            case 78:{int target=valid_target(unit.target)?unit.target:-1;if(target>=0){auto away=normal(unit.position-battle.units[size_t(target)].position);unit.heading=std::atan2(away.x,away.z);}else disengage(true);break;}
+            case 79:break; // 0x4f recomputes the original per-member morale byte.
+            case 80:if(unit.morale<25)unit.routing=true;condition(unit.routing);break;
+            case 81:break; // 0x51 changes individual members, which are represented as one formation here.
+            case 82:break; // 0x52 individual-member scatter remains formation-owned.
+            case 83:{const auto& p=node(a[0]);if(p.flags&1){unit.position={p.x/8.f,unit.position.y,p.z/8.f};unit.destination=unit.position;unit.heading=p.heading*6.2831853f/512;unit.moving=false;unit.target=-1;unit.engaged=false;}break;}
+            case 84:{const auto& p=node(a[0]);unit.position={p.x/8.f,unit.position.y,p.z/8.f};unit.destination=unit.position;unit.heading=p.heading*6.2831853f/512;unit.moving=false;unit.target=-1;unit.engaged=false;break;}
+            case 85:break; // 0x55 teleport visual effect has no separate host particle system.
+            case 86:if(valid_target(unit.target)){unit.destination=battle.units[size_t(unit.target)].position;unit.moving=true;face_target(unit.target);}break;
+            case 87:if(valid_target(unit.target))face_target(unit.target);break;
+            case 88:condition(search(176.f)>=0);break; // 0x58 charge opportunity
+            case 89:{int target=valid_target(unit.target)?unit.target:search(176.f);condition(engage(target,false,false));break;}
+            case 90:{int target=search(176.f);if(engage(target,true,false))s.flag3|=0x80u;break;}
+            case 91:{int target=valid_target(unit.target)?unit.target:-1;if(target>=0){auto away=normal(unit.position-battle.units[size_t(target)].position);unit.heading=std::atan2(away.x,away.z);}else disengage(true);break;}
+            case 92:disengage(true);break;
+            case 93:{math3d::Vec3 away{0,0,unit.enemy?1.f:-1.f};if(valid_target(unit.target))away=normal(unit.position-battle.units[size_t(unit.target)].position);unit.heading=std::atan2(-away.x,-away.z);break;}
+            case 94:case 95:case 96:if(valid_target(unit.target)){engage(unit.target,false,false);unit.engaged=true;s.flag1|=0x800u;}break;
+            case 97:if(valid_target(unit.target)){engage(unit.target,false,false);unit.engaged=true;s.flag1|=0x800u;send(size_t(unit.target),{0x19,int(index),{}});}break;
+            case 98:{bool was=(s.flag1&0x800u)!=0;s.flag1&=~0x800u;if(was)disengage(false);condition(was);break;}
+            case 99:condition(valid_target(unit.target));if(valid_target(unit.target))engage(unit.target,false,false);break;
+            case 100:condition(valid_target(unit.target));break;
+            case 101:condition(!unit.routing && unit.morale>=25);unit.command=UnitCommand::Halt;unit.moving=false;unit.target=-1;unit.engaged=false;break;
+            case 102:condition(!unit.routing && unit.morale>=25);break;
+            case 103:unit.moving=false;unit.engaged=false;break;
+            case 104:if(valid_target(unit.target))face_target(unit.target);break;
             case 105:case 106:case 107:if(op==105 || (op==106&&truth) || (op==107&&!truth))send(index,{uint16_t(a[0]),int(index),{}});break;
             case 108:s.stored=s.event.source;break;
             case 109:s.event.id=uint16_t(a[0]);break;
@@ -144,8 +184,15 @@ void CtlRuntime::run(Battle& battle,size_t index) {
             case 206:unit.regiment.attributes|=a[0];break;
             case 207:unit.regiment.attributes&=~a[0];break;
             case 181:{const auto& p=node(a[1]);condition(std::any_of(battle.units.begin(),battle.units.end(),[&](const Unit& u){return u.regiment.alive && (u.regiment.race&0xe0)==a[0] && !(states[size_t(&u-battle.units.data())].flag1&a[2]) && std::hypot(u.position.x-p.x/8.f,u.position.z-p.z/8.f)<=std::max(1.f,p.radius/8.f);}));break;}
+            case 123:condition(node(a[0]).radius>0);break; // The sandbox has no obstacle/path grid; direct paths are available.
+            case 124:condition(valid_target(unit.target));break;
+            case 128:{int source=s.event.source;if(valid_target(source) && (s.flag1&0x80000u)){s.flag1&=~0x80000u;send(index,{0x1c,int(source),{}});send(size_t(source),{0x1d,int(index),{}});condition(true);}else condition(false);break;}
+            case 129:if(valid_target(unit.target)){unit.destination=battle.units[size_t(unit.target)].position;unit.moving=true;}break;
+            case 130:condition(valid_target(unit.target) && (states[size_t(unit.target)].flag1&a[0]) && unit.engaged);break;
+            case 132:if(valid_target(unit.target))face_target(unit.target);break;
+            case 135:if(valid_target(unit.target)){auto target=battle.units[size_t(unit.target)].position;unit.destination=unit.position+(target-unit.position)*.5f;unit.moving=true;}break;
             case 141:condition(unit.regiment.missile_weapon && (a[0]==0xffffffff || unit.regiment.missile_weapon==a[0]));break;
-            case 162:case 163:case 164:case 165:case 166:case 167:case 168:case 169:case 170:case 171:case 172:search(512.f);break;
+            case 162:case 163:case 164:case 165:case 166:case 167:case 168:case 169:case 170:case 171:case 172:{bool shooting=op==172;int target=search(shooting?battle.shoot_range(unit):512.f);if(target>=0)engage(target,false,shooting);break;}
             case 174:battle.say(index,uint16_t(a[0]));break;
             case 175:{int j=find_unit(a[0]);condition(j>=0);if(j>=0)battle.say(size_t(j),uint16_t(a[1]));break;}
             case 179:{const auto& p=node(a[0]);condition(std::hypot(unit.position.x-p.x/8.f,unit.position.z-p.z/8.f)<=std::max(1.f,p.radius/8.f));break;}

@@ -93,8 +93,8 @@ void Battle::tick() {
     for(size_t i=0;i<units.size();++i) {
         auto& u=units[i];if(!u.regiment.alive)continue;
         u.cooldown=std::max(0.f,u.cooldown-dt);u.charge_time=std::max(0.f,u.charge_time-dt);if(u.command==UnitCommand::Charge && u.charge_time==0)u.command=UnitCommand::Automatic;
-        if(u.routing) {u.position.z+=(u.enemy?1:-1)*12*dt;continue;}
-        if(u.target>=0 && (size_t(u.target)>=units.size() || !units[u.target].regiment.alive || units[u.target].routing))u.target=-1;
+        if(u.routing) {u.engaged=false;u.position.z+=(u.enemy?1:-1)*12*dt;continue;}
+        if(u.target>=0 && (size_t(u.target)>=units.size() || !units[u.target].regiment.alive || units[u.target].routing)){u.target=-1;u.engaged=false;}
         ++u.animation_tick;
         bool ranged=u.command==UnitCommand::Shoot || (u.enemy && can_shoot(u));
         if(u.target<0 && u.command!=UnitCommand::Halt && u.command!=UnitCommand::Break && ((!scripts && u.enemy) || (!u.enemy && !u.moving))) {
@@ -108,6 +108,7 @@ void Battle::tick() {
         Vec3 delta=u.destination-u.position;delta.y=0;float distance=length(delta);
         if(u.target>=0 && distance<(ranged?shoot_range(u):5)) {
             u.moving=false;
+            if(!ranged){u.engaged=true;units[size_t(u.target)].engaged=true;}
             if(u.cooldown==0) {
                 if(ranged){
                     const auto& target=units[size_t(u.target)];unsigned shots=std::min(24u,unsigned(u.regiment.alive));

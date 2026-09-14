@@ -9,7 +9,7 @@ enum class UnitCommand {Automatic,Halt,Shoot,Break,Charge};
 struct Unit {
     Regiment regiment;
     math3d::Vec3 position, destination;
-    bool enemy=false, selected=false, moving=false, routing=false;
+    bool enemy=false, selected=false, moving=false, routing=false, engaged=false;
     float morale=100, cooldown=0,heading=0;
     uint64_t animation_tick=0;
     int target=-1;

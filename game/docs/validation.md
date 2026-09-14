@@ -51,7 +51,7 @@ Menu background, layout and F_MENBG/F_MENBGR font rendering use original assets.
 
 Standalone Debug CTest passes all six tests, including deterministic speech/mute/cancellation checks and original-data playback of all four FSM scripts across deployment, normal and end states. Original BUTTON01 WAV conversion and preservation of music when speech stops are exercised. The root Release build and its four tests also pass. A 180-frame B1_01 OpenGL deployment run completed with SDL audio enabled and no playback errors. These checks establish signal generation and device submission, not listening-based fidelity or original FSM probabilities.
 
-The preceding campaign UI work also passed original-data OpenGL tests covering talking heads, book/equipment/map rendering, banner selection, Start Battle and Halt. Core tests cover deployment polygon/formation rejection, command behavior, magic recharge and campaign presentation checkpoint replay. Equipment remains read-only and facial motion/combat/magic rules are approximate.
+The preceding campaign UI work also passed original-data OpenGL tests covering talking heads, book/equipment/map rendering, banner selection, Start Battle and Halt. Core tests cover deployment polygon/formation rejection, command behavior, CTL charge and search-and-shoot orders, magic recharge and campaign presentation checkpoint replay. Equipment remains read-only and facial motion/combat/magic rules are approximate.
 
 The ASan/UBSan build also passes all six tests, including original audio sequencing (14.50 seconds total).
 
