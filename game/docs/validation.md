@@ -45,7 +45,7 @@ Remaining compatibility limits are stated in the game README. In particular, cam
 - Live SDL/OpenGL playback with audio naturally transitions from ENG.TGQ to INTRO.TGQ. A screenshot captured the intro cinematic at `/tmp/neoomen-intro.bmp`; the menu capture is `/tmp/neoomen-menu.bmp`. No original image/video files are bundled in the repository.
 - Direct campaign startup plays INFO_ENG.TGQ through the shared movie player. Battle simulation remains at zero ticks while frontend movies/menu are active.
 
-Menu background, layout and F_MENBG/F_MENBGR font rendering use original assets. Frontend OpenGL checks cover menu drawing with the decoded palette font, an active original-sprite ranged volley, the right-hand Combat Controls panel and the Halt command. Multiplayer and Tutorial remain disabled. These frontend tests do not expand CTL or combat compatibility.
+Menu background, layout and F_MENBG/F_MENBGR font rendering use original assets. Frontend OpenGL checks cover menu drawing with the decoded palette font, an active original-sprite ranged volley, the `PANELS.SPR` Combat Controls backing and the Halt command. Multiplayer and Tutorial remain disabled. These frontend tests do not expand CTL or combat compatibility.
 
 ## Sound/music integration (2026-09-14)
 

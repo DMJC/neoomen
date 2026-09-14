@@ -215,7 +215,9 @@ void GameUi::battle_draw(Battle& battle,bool paused){
     }else renderer.ui_text(132,354,"SELECT A REGIMENT BANNER",gold);
     renderer.ui_text(349,348,"MAGIC",gold);renderer.ui_rect(355,362,23,66,{.1f,.08f,.15f});float power=66.f*battle.magic_power/Battle::magic_capacity;renderer.ui_rect(355,428-power,23,power,{.25f,.4f,1});renderer.ui_text(387,390,std::to_string(battle.magic_power)+" / "+std::to_string(Battle::magic_capacity),gold);
     renderer.ui_text(345,438,"WINDS "+std::to_string(unsigned(std::ceil(battle.magic_countdown)))+" SECONDS",gold);renderer.ui_rect(345,452,132,6,{.1f,.1f,.15f});renderer.ui_rect(345,452,132*battle.magic_countdown/30,6,{.4f,.5f,1});
-    renderer.ui_rect(498,338,142,142,{.075f,.06f,.04f});renderer.ui_rect(500,340,138,138,{.13f,.095f,.045f});
+    // PANELS frame 0 is the original 150×138 combat-control panel. Keep its
+    // native aspect ratio instead of approximating this area with rectangles.
+    image("Graphics/Sprites/PANELS.SPR",0,490,338,150,138);
     renderer.ui_text(507,343,"COMBAT CONTROLS",gold,.85f);
     const char* labels[]={"HALT H","SHOOT T","BREAK B","CHARGE C"};unsigned frames[]={0,3,9,12};UnitCommand commands[]={UnitCommand::Halt,UnitCommand::Shoot,UnitCommand::Break,UnitCommand::Charge};
     for(unsigned i=0;i<4;++i){float x=510+(i%2)*62,y=362+(i/2)*57;bool enabled=selected && selected->regiment.alive && !selected->routing && battle.phase==Phase::Battle && (i!=1 || battle.can_shoot(*selected));
