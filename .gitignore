@@ -1,0 +1,27 @@
+# CMake build trees and the binaries, object files, and generated metadata they contain.
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+
+# CMake files produced by in-source builds.
+CMakeCache.txt
+CMakeFiles/
+Testing/
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# Compiled binaries and libraries.
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+
+# Editor and compiler by-products.
+*.user
+*.swp
+*~
