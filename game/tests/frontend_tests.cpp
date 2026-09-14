@@ -78,6 +78,8 @@ int main(int argc,char** argv){try{
         battle.say(0,37);renderer.draw(battle,true);ui.battle_draw(battle,true);
         check(battle.voice_active && battle.speech_queue.empty(),"Mission dialogue starts original voice and consumes request");
         check(glGetError()==GL_NO_ERROR,"In-mission animated portrait rendering");renderer.screenshot("/tmp/neoomen-mission-head.bmp");
+        battle.units[0].regiment.wizard=1;battle.magic_power=1;
+        click.button.x=650;click.button.y=470;check(ui.battle_event(battle,click) && battle.magic_power==0 && !battle.projectiles.empty(),"Magic button casts from selected wizard");
         for(auto& unit:battle.units)unit.selected=false;
         click.button.x=105;click.button.y=450;ui.battle_event(battle,click);
         check(!battle.units[0].selected,"Deployment banner tray is inactive after battle starts");battle.units[0].selected=true;

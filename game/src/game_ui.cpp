@@ -123,12 +123,15 @@ bool GameUi::battle_event(Battle& battle,const SDL_Event& e){
         }else if(e.type==SDL_MOUSEBUTTONDOWN){cancel_drag();if(e.button.button==SDL_BUTTON_RIGHT)return true;}
     }
     if(e.type==SDL_MOUSEMOTION){
-        auto p=renderer.ui_mouse(float(e.motion.x),float(e.motion.y));hovered_command=-1;
-        for(unsigned i=0;i<4;++i)if(hit(p,510+(i%2)*62,345+(i/2)*61,58,59))hovered_command=int(i);
-        return hovered_command>=0;
+        auto p=renderer.ui_mouse(float(e.motion.x),float(e.motion.y));hovered_command=-1;hovered_magic=hit(p,397,365,78,34);
+        for(unsigned i=0;i<4;++i)if(hit(p,510+(i%2)*62,362+(i/2)*57,58,54))hovered_command=int(i);
+        return hovered_command>=0 || hovered_magic;
     }
     bool key=e.type==SDL_KEYDOWN && !e.key.repeat;
-    if(key){UnitCommand cmd=UnitCommand::Automatic;switch(e.key.keysym.sym){case SDLK_h:cmd=UnitCommand::Halt;break;case SDLK_t:cmd=UnitCommand::Shoot;break;case SDLK_b:cmd=UnitCommand::Break;break;case SDLK_c:cmd=UnitCommand::Charge;break;default:return false;}notice=battle.command(cmd)?"":"ORDER UNAVAILABLE";if(notice.empty())audio.cue();return true;}
+    if(key){
+        if(e.key.keysym.sym==SDLK_g){notice=battle.cast_magic()?"":"MAGIC UNAVAILABLE";if(notice.empty())audio.effect("FIRECAST");return true;}
+        UnitCommand cmd=UnitCommand::Automatic;switch(e.key.keysym.sym){case SDLK_h:cmd=UnitCommand::Halt;break;case SDLK_t:cmd=UnitCommand::Shoot;break;case SDLK_b:cmd=UnitCommand::Break;break;case SDLK_c:cmd=UnitCommand::Charge;break;default:return false;}notice=battle.command(cmd)?"":"ORDER UNAVAILABLE";if(notice.empty())audio.cue();return true;
+    }
     if(e.type!=SDL_MOUSEBUTTONDOWN)return false;
     auto p=renderer.ui_mouse(float(e.button.x),float(e.button.y));bool left=e.button.button==SDL_BUTTON_LEFT;
     // Banner tray works in deployment and battle; dead units stay visible/disabled.
@@ -143,6 +146,7 @@ bool GameUi::battle_event(Battle& battle,const SDL_Event& e){
         }return true;
     }
     if(left && hit(p,510,317,120,20) && battle.phase==Phase::Deployment){battle.start();audio.effect("HORNURG");notice.clear();return true;}
+    if(hit(p,397,365,78,34)){if(left){notice=battle.cast_magic()?"":"MAGIC UNAVAILABLE";if(notice.empty())audio.effect("FIRECAST");}return true;}
     const UnitCommand commands[]={UnitCommand::Halt,UnitCommand::Shoot,UnitCommand::Break,UnitCommand::Charge};
     for(unsigned i=0;i<4;++i)if(hit(p,510+(i%2)*62,362+(i/2)*57,58,54)){
         if(left){notice=battle.command(commands[i])?"":"ORDER UNAVAILABLE";if(notice.empty())audio.cue();}
@@ -198,7 +202,7 @@ void GameUi::battle_draw(Battle& battle,bool paused){
     }}
     renderer.ui_rect(0,0,640,20,{.045f,.04f,.03f});renderer.ui_text(8,6,battle.phase==Phase::Deployment?"DEPLOYMENT - POSITION YOUR REGIMENTS":battle.phase==Phase::Battle?(paused?"BATTLE PAUSED":"BATTLE"):battle.phase==Phase::Victory?"VICTORY":"DEFEAT",gold);
     renderer.ui_text(470,6,"ESC MENU / SPACE PAUSE",gold);
-    renderer.ui_rect(0,335,640,145,{.055f,.055f,.045f});if(battle.phase==Phase::Deployment)image("Graphics/Sprites/DEPLOY.SPR",0,8,335,110,129);
+    if(battle.phase==Phase::Deployment){renderer.ui_rect(0,335,640,145,{.055f,.055f,.045f});image("Graphics/Sprites/DEPLOY.SPR",0,8,335,110,129);}
     std::vector<const Unit*> friendly;for(const auto& u:battle.units)if(!u.enemy)friendly.push_back(&u);
     if(banner_page*12>=friendly.size())banner_page=0;
     for(size_t slot=0;battle.phase==Phase::Deployment && slot<12 && banner_page*12+slot<friendly.size();++slot){const auto& u=*friendly[banner_page*12+slot];float x=13+(slot%4)*25,y=354+(slot/4)*31;
@@ -214,10 +218,8 @@ void GameUi::battle_draw(Battle& battle,bool paused){
         const char* orders[]={"READY","HALTED","SHOOTING","BREAKING OFF","CHARGING"};renderer.ui_text(132,436,orders[unsigned(selected->command)],gold);
     }else renderer.ui_text(132,354,"SELECT A REGIMENT BANNER",gold);
     renderer.ui_text(349,348,"MAGIC",gold);renderer.ui_rect(355,362,23,66,{.1f,.08f,.15f});float power=66.f*battle.magic_power/Battle::magic_capacity;renderer.ui_rect(355,428-power,23,power,{.25f,.4f,1});renderer.ui_text(387,390,std::to_string(battle.magic_power)+" / "+std::to_string(Battle::magic_capacity),gold);
+    bool magic_enabled=selected && battle.can_cast_magic(*selected);renderer.ui_text(403,369,"CAST G",magic_enabled?(hovered_magic?math3d::Vec3{.8f,.65f,1.f}:gold):dim,.9f);renderer.ui_text(403,381,"ARCANE BOLT",magic_enabled?(hovered_magic?math3d::Vec3{.8f,.65f,1.f}:gold):dim,.65f);
     renderer.ui_text(345,438,"WINDS "+std::to_string(unsigned(std::ceil(battle.magic_countdown)))+" SECONDS",gold);renderer.ui_rect(345,452,132,6,{.1f,.1f,.15f});renderer.ui_rect(345,452,132*battle.magic_countdown/30,6,{.4f,.5f,1});
-    // PANELS frame 0 is the original 150×138 combat-control panel. Keep its
-    // native aspect ratio instead of approximating this area with rectangles.
-    image("Graphics/Sprites/PANELS.SPR",0,490,338,150,138);
     renderer.ui_text(507,343,"COMBAT CONTROLS",gold,.85f);
     const char* labels[]={"HALT H","SHOOT T","BREAK B","CHARGE C"};unsigned frames[]={0,3,9,12};UnitCommand commands[]={UnitCommand::Halt,UnitCommand::Shoot,UnitCommand::Break,UnitCommand::Charge};
     for(unsigned i=0;i<4;++i){float x=510+(i%2)*62,y=362+(i/2)*57;bool enabled=selected && selected->regiment.alive && !selected->routing && battle.phase==Phase::Battle && (i!=1 || battle.can_shoot(*selected));
@@ -226,8 +228,8 @@ void GameUi::battle_draw(Battle& battle,bool paused){
         image("Graphics/Sprites/BUTTONS.SPR",frames[i]+(enabled?(active?2:1):0),x+5,y,42,42);renderer.ui_text(x-1,y+43,labels[i],enabled?(hover?math3d::Vec3{1,1,.55f}:gold):dim,.8f);
     }
     if(hovered_command>=0 && hovered_command<4){
-        static const char* help[]={"HALT: HOLD POSITION AND CANCEL TARGET", "SHOOT: FIRE WHILE STATIONARY", "BREAK: DISENGAGE FROM THE ENEMY", "CHARGE: RUSH THE CURRENT ORDER"};
-        renderer.ui_rect(190,317,290,18,{.12f,.06f,.035f});renderer.ui_text(198,322,help[hovered_command],{1,.7f,.3f},.75f);
+        static const char* help[]={"HALT: HOLD POSITION AND CANCEL TARGET", "SHOOT: FIRE WHILE STATIONARY", "BREAK: DISENGAGE FROM THE ENEMY", "CHARGE: RUSH A NEARBY ENEMY"};
+        renderer.ui_text(198,322,help[hovered_command],{1,.7f,.3f},.75f);
     }
     if(battle.phase==Phase::Deployment)button(510,317,120,"START BATTLE");
     else mission_dialogue(battle);

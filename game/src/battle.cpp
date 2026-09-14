@@ -54,12 +54,46 @@ bool Battle::command(UnitCommand action){
     bool applied=false;
     for(auto& u:units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing){
         if(action==UnitCommand::Shoot && !can_shoot(u))continue;
+        if(action==UnitCommand::Charge){
+            if(u.target<0 || size_t(u.target)>=units.size() || !units[size_t(u.target)].enemy || !units[size_t(u.target)].regiment.alive){
+                float nearest=176.f;
+                for(size_t i=0;i<units.size();++i){const auto& other=units[i];if(!other.enemy || !other.regiment.alive || other.routing)continue;
+                    Vec3 delta=other.position-u.position;delta.y=0;float distance=length(delta);if(distance<nearest){nearest=distance;u.target=int(i);}}
+            }
+            if(u.target<0)continue;
+            u.destination=units[size_t(u.target)].position;u.moving=true;
+        }
         u.command=action;applied=true;
         if(action==UnitCommand::Halt){u.moving=false;u.target=-1;u.destination=u.position;}
         if(action==UnitCommand::Shoot)u.moving=false;
         if(action==UnitCommand::Charge)u.charge_time=8;
         if(action==UnitCommand::Break){Vec3 away{0,0,-1};if(u.target>=0 && size_t(u.target)<units.size())away=normal(u.position-units[size_t(u.target)].position);u.target=-1;u.destination=u.position+away*25;u.moving=true;}
     }return applied;
+}
+bool Battle::can_cast_magic(const Unit& u) const {
+    if(phase!=Phase::Battle || !magic_power || u.enemy || !u.selected || !u.regiment.alive || u.routing || !u.regiment.wizard)return false;
+    if(u.target>=0 && size_t(u.target)<units.size()){const auto& target=units[size_t(u.target)];if(target.enemy && target.regiment.alive && !target.routing){Vec3 delta=target.position-u.position;delta.y=0;if(length(delta)<=120)return true;}}
+    for(const auto& target:units)if(target.enemy && target.regiment.alive && !target.routing){Vec3 delta=target.position-u.position;delta.y=0;if(length(delta)<=120)return true;}
+    return false;
+}
+bool Battle::cast_magic(){
+    if(phase!=Phase::Battle || !magic_power)return false;
+    for(size_t i=0;i<units.size();++i){
+        auto& wizard=units[i];if(!can_cast_magic(wizard))continue;
+        int target=wizard.target;
+        if(target<0 || size_t(target)>=units.size() || !units[size_t(target)].enemy || !units[size_t(target)].regiment.alive){
+            float nearest=120.f;target=-1;
+            for(size_t j=0;j<units.size();++j){const auto& hostile=units[j];if(!hostile.enemy || !hostile.regiment.alive || hostile.routing)continue;
+                Vec3 delta=hostile.position-wizard.position;delta.y=0;float distance=length(delta);if(distance<nearest){nearest=distance;target=int(j);}}
+        }
+        if(target<0)continue;
+        wizard.target=target;
+        const auto& hostile=units[size_t(target)];Vec3 start=wizard.position+Vec3{0,2.5f,0};Vec3 end=hostile.position+Vec3{0,.8f,0};
+        float flight=std::clamp(length(end-start)/95.f,.25f,1.25f);
+        projectiles.push_back({start,start,end,int(i),target,0,flight,true,false,true,3});
+        --magic_power;return true;
+    }
+    return false;
 }
 void Battle::tick() {
     if(phase!=Phase::Battle)return;
@@ -72,7 +106,7 @@ void Battle::tick() {
     for(auto& shot:projectiles){
         shot.age+=dt;float t=std::min(1.f,shot.age/shot.duration);shot.position=shot.start*(1-t)+shot.end*t;
         shot.position.y+=3.5f*std::sin(t*3.14159265f);
-        if(t==1 && shot.hit && shot.target>=0 && size_t(shot.target)<units.size() && units[size_t(shot.target)].regiment.alive)++damage[size_t(shot.target)];
+        if(t==1 && shot.hit && shot.target>=0 && size_t(shot.target)<units.size() && units[size_t(shot.target)].regiment.alive)damage[size_t(shot.target)]+=shot.damage;
     }
     projectiles.erase(std::remove_if(projectiles.begin(),projectiles.end(),[](const Projectile& shot){return shot.age>=shot.duration;}),projectiles.end());
     auto rolls_to_wound=[&](const Unit& attacker,const Unit& defender){

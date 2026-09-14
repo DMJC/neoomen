@@ -294,7 +294,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
         const auto& art=shot.artillery?cannon_projectile:bolt_projectile;if(!art.texture)continue;
         float size=shot.artillery?1.7f:1.f;Vec3 right{std::cos(yaw),0,-std::sin(yaw)},up{0,size,0};Vec3 p=shot.position;
         std::vector<m3d::Vertex> quad={{p-right*size+up,{},0,0},{p+right*size+up,{},1,0},{p+right*size-up,{},1,1},{p-right*size+up,{},0,0},{p+right*size-up,{},1,1},{p-right*size-up,{},0,1}};
-        Batch batch;batch.vao=dynamic_vao;batch.vbo=dynamic_vbo;batch.texture=art.texture;upload(batch,quad);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);render_batch(batch,Mat4::identity(),vp,{1,1,1});glDisable(GL_BLEND);glDepthMask(GL_TRUE);
+        Batch batch;batch.vao=dynamic_vao;batch.vbo=dynamic_vbo;batch.texture=art.texture;upload(batch,quad);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);render_batch(batch,Mat4::identity(),vp,shot.magic?Vec3{.55f,.35f,1.f}:Vec3{1,1,1});glDisable(GL_BLEND);glDepthMask(GL_TRUE);
     }
     std::sort(translucent.begin(),translucent.end(),[](const Draw& a,const Draw& b){return a.depth>b.depth;});
     glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);

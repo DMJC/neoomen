@@ -18,6 +18,7 @@ private:
     unsigned mission_head=0;bool mission_portrait=false;
     std::string mission_speaker;Pcm mission_speech;
     int hovered_command=-1;
+    bool hovered_magic=false;
     void mission_dialogue(Battle&);
     std::string mission_clip(const Regiment&,unsigned);
     int drag_unit=-1,drag_start_x=0,drag_start_y=0;

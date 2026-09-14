@@ -21,7 +21,8 @@ struct Projectile {
     math3d::Vec3 start,position,end;
     int source=-1,target=-1;
     float age=0,duration=0;
-    bool hit=false,artillery=false;
+    bool hit=false,artillery=false,magic=false;
+    unsigned damage=1;
 };
 // Original mission scripts drive a provisional deterministic combat host.
 class Battle {
@@ -44,6 +45,9 @@ public:
     void start();
     bool order(math3d::Vec3 point,int target=-1);
     bool command(UnitCommand);
+    // Cast the selected wizard's provisional Arcane Bolt at a nearby hostile unit.
+    bool cast_magic();
+    bool can_cast_magic(const Unit&) const;
     bool can_shoot(const Unit&) const;
     float shoot_range(const Unit&) const;
     bool can_deploy(math3d::Vec3,unsigned troops) const;
