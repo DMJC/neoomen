@@ -176,8 +176,6 @@ int main(int argc,char** argv) {
                 if(event.type==SDL_MOUSEWHEEL)renderer.zoom(float(event.wheel.y)*(event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED?-1:1));
                 if(event.type==SDL_MOUSEMOTION && (event.motion.state&SDL_BUTTON_MMASK))renderer.orbit(float(event.motion.xrel),float(event.motion.yrel));
                 if(event.type==SDL_MOUSEBUTTONDOWN && (!campaign || campaign->state==neo::CampaignState::Mission)) {
-                    int width,height;SDL_GetWindowSize(window.get(),&width,&height);(void)width;
-                    if(renderer.ui_mouse(float(event.button.x),float(event.button.y)).y>=335)continue;
                     int hit=renderer.pick(battle,float(event.button.x),float(event.button.y));
                     if(event.button.button==SDL_BUTTON_LEFT) {
                         if(!(SDL_GetModState()&KMOD_SHIFT))for(auto& unit:battle.units)unit.selected=false;
@@ -217,7 +215,7 @@ int main(int argc,char** argv) {
             if(!frontend.active() && (!campaign || campaign->state==neo::CampaignState::Mission)){
                 auto ui=renderer.ui_mouse(float(mouse_x),float(mouse_y));
                 if(buttons&SDL_BUTTON_MMASK)cursor="ROTATE";
-                else if(ui.y>=20 && ui.y<335){
+                else if(!game_ui.covers_battle(battle,ui)){
                     int hit=renderer.pick(battle,float(mouse_x),float(mouse_y));
                     bool selected=false;for(const auto& u:battle.units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing)selected=true;
                     if(hit>=0 && !battle.units[size_t(hit)].enemy)cursor="HAND";

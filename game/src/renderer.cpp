@@ -169,10 +169,10 @@ void Renderer::pan(float right,float forward,float dt) {
     auto b=camera_basis(eye(),target);Vec3 f=normal(Vec3{b.forward.x,0,b.forward.z});target=target+(b.right*right+f*forward)*(distance*.5f*dt);
 }
 Mat4 Renderer::view_projection() const {
-    int w,h;SDL_GetWindowSize(window,&w,&h);float scale=std::min(w/640.f,h/480.f);h=int((h-480*scale)/2+335*scale);return perspective(.84f,float(std::max(1,w))/std::max(1,h),std::max(.02f,distance/10000),distance+radius*20)*look_at(eye(),target);
+    int w,h;SDL_GetWindowSize(window,&w,&h);return perspective(.84f,float(std::max(1,w))/std::max(1,h),std::max(.02f,distance/10000),distance+radius*20)*look_at(eye(),target);
 }
 Vec3 Renderer::ray(float x,float y) const {
-    int w,h;SDL_GetWindowSize(window,&w,&h);float scale=std::min(w/640.f,h/480.f);h=std::max(1,int((h-480*scale)/2+335*scale));w=std::max(1,w);auto b=camera_basis(eye(),target);
+    int w,h;SDL_GetWindowSize(window,&w,&h);h=std::max(1,h);w=std::max(1,w);auto b=camera_basis(eye(),target);
     return normal(b.forward+b.right*((2*x/w-1)*float(w)/h*std::tan(.42f))+b.up*((1-2*y/h)*std::tan(.42f)));
 }
 bool Renderer::ground(float x,float y,Vec3& point) const {
@@ -229,7 +229,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
     const auto now=SDL_GetTicks64();
     if(water_clock && !paused)water_time+=std::min(.1,double(now-water_clock)/1000.0);
     water_clock=now;
-    int w,h;SDL_GL_GetDrawableSize(window,&w,&h);float scale=std::min(w/640.f,h/480.f);int worldh=int((h-480*scale)/2+335*scale);glViewport(0,h-worldh,w,worldh);glClearColor(.06f,.08f,.11f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    int w,h;SDL_GL_GetDrawableSize(window,&w,&h);glViewport(0,0,w,h);glClearColor(.06f,.08f,.11f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
     scene_shadows=true;glUseProgram(program);glUniform1i(glGetUniformLocation(program,"spritePass"),0);
     glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glDisable(GL_BLEND);glDepthMask(GL_TRUE);auto vp=view_projection();
     struct Draw {const Batch* batch;Mat4 model;float depth;};std::vector<Draw> translucent;
@@ -412,7 +412,7 @@ void Renderer::ui_image(const std::filesystem::path& file,unsigned frame,float x
     std::vector<m3d::Vertex> v={{{x,y,0},{},0,0},{{x+w,y,0},{},1,0},{{x+w,y+h,0},{},1,1},{{x,y,0},{},0,0},{{x+w,y+h,0},{},1,1},{{x,y+h,0},{},0,1}};
     Batch b;b.vao=dynamic_vao;b.vbo=dynamic_vbo;b.texture=t.texture;upload(b,v);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);render_batch(b,Mat4::identity(),ui_matrix(),{1,1,1});glDisable(GL_BLEND);
 }
-bool Renderer::project(Vec3 p,float& x,float& y) const {auto vp=view_projection();float clipw=vp.v[3]*p.x+vp.v[7]*p.y+vp.v[11]*p.z+vp.v[15];if(clipw<=0)return false;auto q=transform(vp,p);int w,h;SDL_GetWindowSize(window,&w,&h);float scale=std::min(w/640.f,h/480.f),worldh=(h-480*scale)/2+335*scale;auto logical=ui_mouse((q.x/clipw+1)*w/2,(1-q.y/clipw)*worldh/2);x=logical.x;y=logical.y;return x>=0 && x<=640 && y>=0 && y<=480;}
+bool Renderer::project(Vec3 p,float& x,float& y) const {auto vp=view_projection();float clipw=vp.v[3]*p.x+vp.v[7]*p.y+vp.v[11]*p.z+vp.v[15];if(clipw<=0)return false;auto q=transform(vp,p);int w,h;SDL_GetWindowSize(window,&w,&h);auto logical=ui_mouse((q.x/clipw+1)*w/2,(1-q.y/clipw)*h/2);x=logical.x;y=logical.y;return x>=0 && x<=640 && y>=0 && y<=480;}
 void Renderer::portrait(const std::filesystem::path& root,unsigned id,float x,float y,float width,float height,float mouth,double time){
     if(!heads.count(id)){
         auto db=read_file(m3d::resolve(root,"Graphics/PORTRAIT/SCRIPT/HEADS.DB"));if(db.empty() || id>=db[0] || db.size()!=1+size_t(db[0])*39)throw std::runtime_error("Invalid portrait database");

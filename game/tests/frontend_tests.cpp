@@ -41,7 +41,13 @@ int main(int argc,char** argv){try{
         neo::Battle battle;battle.reset(campaign.active_army(),campaign.active_army(),renderer.center,renderer.radius);auto setup=neo::BattleSetup::decode(neo::read_file(m3d::resolve(mission.parent_path(),"B1_01.BTB")));battle.deploy(setup);renderer.load_units(argv[1],battle);
         // With the camera and troops fixed, only the water advances between these draws.
         auto pixels=[&](){int w,h;SDL_GL_GetDrawableSize(window,&w,&h);std::vector<unsigned char> rgba(size_t(w)*h*4);glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data());return rgba;};
-        renderer.draw(battle,false);auto water_before=pixels();SDL_Delay(100);renderer.draw(battle,false);auto water_after=pixels();
+        renderer.draw(battle,false);
+        int viewport[4],drawable_w,drawable_h;glGetIntegerv(GL_VIEWPORT,viewport);SDL_GL_GetDrawableSize(window,&drawable_w,&drawable_h);
+        check(viewport[0]==0 && viewport[1]==0 && viewport[2]==drawable_w && viewport[3]==drawable_h,"Battle scene fills window behind HUD");
+        math3d::Vec3 ground_point;check(renderer.ground(480,300,ground_point),"Center ray intersects terrain");float projected_x,projected_y;
+        check(renderer.project(ground_point,projected_x,projected_y),"Picked terrain projects to screen");auto logical_center=renderer.ui_mouse(480,300);
+        check(std::abs(projected_x-logical_center.x)<.1f && std::abs(projected_y-logical_center.y)<.1f,"Full-window picking and projection agree");
+        auto water_before=pixels();SDL_Delay(100);renderer.draw(battle,false);auto water_after=pixels();
         check(water_before!=water_after,"Water animation changes rendered pixels");
         renderer.draw(battle,true);auto paused_water=pixels();SDL_Delay(30);renderer.draw(battle,true);
         check(paused_water==pixels(),"Pause freezes water vertex and UV animation");
@@ -71,6 +77,7 @@ int main(int argc,char** argv){try{
         check(ui.battle_event(battle,cancel) && !ui.dragging(),"Escape cancels banner drag");
         renderer.draw(battle,false);ui.battle_draw(battle,false);check(glGetError()==GL_NO_ERROR,"Deployment HUD rendering");renderer.screenshot("/tmp/neoomen-selected-hud.bmp");
         click.button.x=790;click.button.y=407;check(ui.battle_event(battle,click) && battle.phase==neo::Phase::Battle,"Start battle button");
+        check(!ui.covers_battle(battle,{125,460,0}) && ui.covers_battle(battle,{535,380,0}),"Only occupied HUD areas intercept battlefield input");
         battle.units[0].regiment.missile_weapon=10;battle.units[0].regiment.stats[2]=10;battle.units[0].regiment.stats[3]=10;
         for(size_t i=0;i<battle.units.size();++i)if(battle.units[i].enemy){battle.units[0].position={0,0,0};battle.units[0].destination=battle.units[0].position;battle.units[i].position={35,0,0};battle.units[i].destination=battle.units[i].position;break;}
         check(battle.command(neo::UnitCommand::Shoot),"Shoot command launches ranged attack");battle.tick();check(!battle.projectiles.empty(),"Ranged projectile in flight");

@@ -10,6 +10,7 @@ public:
     void campaign_draw(Campaign&);
     bool battle_event(Battle&,const SDL_Event&);
     void battle_draw(Battle&,bool paused);
+    bool covers_battle(const Battle&,math3d::Vec3) const;
     bool dragging()const{return drag_unit>=0 && drag_moved;}
     bool valid_drop()const{return drag_valid;}
     void order_feedback(bool accepted){notice=accepted?"":"OUTSIDE DEPLOYMENT AREA";}
