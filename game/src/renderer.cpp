@@ -11,6 +11,22 @@ constexpr const char* windmill_sails="../../Furnture/BATTLE/_GSAILS.M3D";
 constexpr const char* stone_windmill_sails="../../Furnture/BATTLE/_KSAILS.M3D";
 constexpr const char* waterwheel="../../Furnture/BATTLE/_GWHEEL.M3D";
 std::string lower(std::string value) {for(auto& c:value)c=char(std::tolower(static_cast<unsigned char>(c)));return value;}
+SDL_Surface* load_bmp(const std::filesystem::path& path) {
+    if(auto* surface=SDL_LoadBMP(path.c_str()))return surface;
+    // A few shipped 8-bit textures (notably B2_08's JEWRK files) declare
+    // 255 palette entries but use index 255.  The bitmap data begins one
+    // palette colour too early, so repair the missing black entry in memory.
+    auto bytes=read_file(path);
+    if(bytes.size()>=54 && bytes[0]=='B' && bytes[1]=='M' && prj::u32(bytes,14)==40 &&
+       (uint16_t(bytes[28])|uint16_t(bytes[29])<<8)==8 && prj::u32(bytes,30)==0 &&
+       prj::u32(bytes,46)==255 && prj::u32(bytes,10)==14+40+255*4) {
+        auto offset=prj::u32(bytes,10);bytes.insert(bytes.begin()+offset,{0,0,0,0});
+        prj::put32(bytes,10,offset+4);prj::put32(bytes,46,256);
+        auto* stream=SDL_RWFromConstMem(bytes.data(),int(bytes.size()));
+        if(stream)return SDL_LoadBMP_RW(stream,1);
+    }
+    return nullptr;
+}
 GLuint shader(GLenum type,const char* source) {
     GLuint s=glCreateShader(type);glShaderSource(s,1,&source,nullptr);glCompileShader(s);GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
     if(!ok) {char log[4096];glGetShaderInfoLog(s,sizeof(log),nullptr,log);glDeleteShader(s);throw std::runtime_error(log);}return s;
@@ -120,7 +136,7 @@ void Renderer::upload(Batch& b,const std::vector<m3d::Vertex>& vertices) {
 }
 GLuint Renderer::texture(const std::filesystem::path& p,bool key) {
     using Surface=std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)>;
-    Surface source(SDL_LoadBMP(p.c_str()),SDL_FreeSurface);if(!source)throw std::runtime_error(SDL_GetError());
+    Surface source(load_bmp(p),SDL_FreeSurface);if(!source)throw std::runtime_error(SDL_GetError());
     if(source->w>8192 || source->h>8192)throw std::runtime_error("Texture exceeds 8192 pixels");
     if(key)SDL_SetColorKey(source.get(),SDL_TRUE,source->format->palette?0:SDL_MapRGB(source->format,0,0,0));
     Surface rgba(SDL_ConvertSurfaceFormat(source.get(),SDL_PIXELFORMAT_RGBA32,0),SDL_FreeSurface);if(!rgba)throw std::runtime_error(SDL_GetError());
@@ -451,7 +467,7 @@ Renderer::UiImage& Renderer::ui_texture(const std::filesystem::path& file,unsign
     auto key=file.string()+"#"+std::to_string(frame);auto found=ui_images.find(key);if(found!=ui_images.end())return found->second;
     SpriteFrame pixels;auto ext=file.extension().string();for(auto& c:ext)c=char(std::tolower(static_cast<unsigned char>(c)));
     if(ext==".spr")pixels=decode_sprite(read_file(file),frame);
-    else {std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)> src(SDL_LoadBMP(file.c_str()),SDL_FreeSurface);if(!src)throw std::runtime_error(SDL_GetError());
+    else {std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)> src(load_bmp(file),SDL_FreeSurface);if(!src)throw std::runtime_error(SDL_GetError());
         std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)> rgba(SDL_ConvertSurfaceFormat(src.get(),SDL_PIXELFORMAT_RGBA32,0),SDL_FreeSurface);if(!rgba)throw std::runtime_error(SDL_GetError());
         pixels={unsigned(rgba->w),unsigned(rgba->h),prj::Bytes(size_t(rgba->w)*rgba->h*4)};for(int y=0;y<rgba->h;++y)std::memcpy(pixels.rgba.data()+size_t(y)*rgba->w*4,static_cast<uint8_t*>(rgba->pixels)+y*rgba->pitch,size_t(rgba->w)*4);
     }
