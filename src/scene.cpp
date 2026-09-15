@@ -34,7 +34,7 @@ out vec4 color;
 void main() {
     vec4 tex=texture(image,uv);
     if(tex.a<0.45) discard;
-    float light=0.72+0.28*abs(dot(normalize(n+vec3(0,0.00001,0)),normalize(vec3(0.3,1,0.4))));
+    float light=0.45+0.55*max(0.0,dot(normalize(n+vec3(0,0.00001,0)),normalize(vec3(0.3,1,0.4))));
     color=vec4(mix(tex.rgb*light,vec3(1,0.72,0.12),selected*0.35),tex.a*opacity);
 }
 )";
@@ -138,7 +138,7 @@ void SceneView::load_scene() {
         auto path=m3d::resolve(root,name);
         if(path.empty()) {issues.push_back("Missing mesh: "+name);continue;}
         try {
-            auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);auto& asset=assets[name];asset.mesh=std::move(model);
+            auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);else if(name!=water_key)for(auto& batch:model.batches){for(size_t i=0;i+2<batch.vertices.size();i+=3)std::swap(batch.vertices[i+1],batch.vertices[i+2]);for(auto& vertex:batch.vertices)vertex.normal=vertex.normal*-1.f;}auto& asset=assets[name];asset.mesh=std::move(model);
             for(auto& batch:asset.mesh.batches) {
                 GpuBatch gpu;bool keying=((batch.flags|m3d::render_flags(name))&16)!=0;
                 auto flags=batch.flags|m3d::render_flags(name);

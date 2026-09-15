@@ -7,6 +7,7 @@
 using namespace math3d;
 namespace neo {
 namespace {
+constexpr const char* windmill_sails="../../Furnture/BATTLE/_GSAILS.M3D";
 std::string lower(std::string value) {for(auto& c:value)c=char(std::tolower(static_cast<unsigned char>(c)));return value;}
 GLuint shader(GLenum type,const char* source) {
     GLuint s=glCreateShader(type);glShaderSource(s,1,&source,nullptr);glCompileShader(s);GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
@@ -33,7 +34,7 @@ in vec2 uv;in vec3 n;in vec3 world;uniform sampler2D shadowMap;uniform vec2 shad
 void main(){vec4 tex=texture(image,uv);if(tex.a<0.45)discard;
 if(spritePass==1 && tex.a>.75)discard;
 if(spritePass==2 && tex.a<.75)discard;
-float light=length(n)<0.1?1.0:0.72+0.28*abs(dot(normalize(n),normalize(vec3(.3,1,.4))));
+float light=length(n)<0.1?1.0:0.45+0.55*max(0.0,dot(normalize(n),normalize(vec3(.3,1,.4))));
 float visibility=1.0;
 if(useShadows){
     // SHD is an occluder-height grid in world units, not an opacity image.
@@ -55,13 +56,14 @@ void triangle(std::vector<m3d::Vertex>& v,Vec3 a,Vec3 b,Vec3 c) {
 void rectangle(std::vector<m3d::Vertex>& v,float x,float y,float w,float h) {
     for(Vec3 p: {Vec3{x,y,0},Vec3{x+w,y,0},Vec3{x+w,y+h,0},Vec3{x,y,0},Vec3{x+w,y+h,0},Vec3{x,y+h,0}})v.push_back({p,{},0,0});
 }
-Mat4 rotate_about_z(Vec3 pivot,float angle) {
+Mat4 rotate_about_x(Vec3 pivot,float angle) {
     Mat4 m=Mat4::identity();float c=std::cos(angle),s=std::sin(angle);
-    m.v[0]=c;m.v[1]=s;m.v[4]=-s;m.v[5]=c;
-    m.v[12]=pivot.x-c*pivot.x+s*pivot.y;
-    m.v[13]=pivot.y-s*pivot.x-c*pivot.y;
+    m.v[5]=c;m.v[6]=s;m.v[9]=-s;m.v[10]=c;
+    m.v[13]=pivot.y-c*pivot.y+s*pivot.z;
+    m.v[14]=pivot.z-s*pivot.y-c*pivot.z;
     return m;
 }
+Mat4 translate(Vec3 offset) {auto m=Mat4::identity();m.v[12]=offset.x;m.v[13]=offset.y;m.v[14]=offset.z;return m;}
 const std::map<char,std::string> glyphs={
 {'A',"01110100011000111111100011000110001"},{'B',"11110100011000111110100011000111110"},
 {'C',"01111100001000010000100001000001111"},{'D',"11110100011000110001100011000111110"},
@@ -141,22 +143,26 @@ void Renderer::load(const std::filesystem::path& file) {
     }
     auto mesh_name=[](std::string name){std::filesystem::path p(name);p.replace_extension(".M3X");return p.string();};
     terrain=mesh_name(document.mesh());water=document.mesh(true).empty()?"":mesh_name(document.mesh(true));
-    auto names=document.catalog();names.push_back(terrain);if(!water.empty())names.push_back(water);
+    auto names=document.catalog();names.push_back(terrain);if(!water.empty())names.push_back(water);names.push_back(windmill_sails);
     std::map<std::string,GLuint> cache;
     for(const auto& name:names) {
         if(assets.count(name))continue;
         auto path=m3d::resolve(root,name);
         if(path.empty()){if(name==terrain)throw std::runtime_error("Missing terrain "+name);std::cerr<<"Missing mesh: "<<name<<'\n';continue;}
         auto& a=assets[name];a.cpu=m3d::Model::open(path);
+        if(name!=terrain && name!=water)for(auto& batch:a.cpu.batches) {
+            for(size_t i=0;i+2<batch.vertices.size();i+=3)std::swap(batch.vertices[i+1],batch.vertices[i+2]);
+            for(auto& vertex:batch.vertices)vertex.normal=vertex.normal*-1.f;
+        }
         for(const auto& batch:a.cpu.batches) {
-            Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(name);
+            Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(path.filename().string());
             gpu.alpha=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.water=(flags&2)!=0;
             if(batch.material>=0) {
                 auto material=lower(a.cpu.textures.at(size_t(batch.material)));
                 // Windmill models keep the body and the sails in one M3D.  The
                 // sail material identifies the detachable rotating sub-part.
-                gpu.rotor=material.find("sails")!=std::string::npos;
-                auto image=m3d::texture_path(root,a.cpu.textures.at(size_t(batch.material)));
+                gpu.rotor=material.find("sails")!=std::string::npos || name==windmill_sails;
+                auto image=m3d::texture_path(path.parent_path(),a.cpu.textures.at(size_t(batch.material)));
                 if(!image.empty()) {std::string k=image.string()+((flags&16)?"|key":"|opaque");if(!cache.count(k))cache[k]=texture(image,(flags&16)!=0);gpu.texture=cache[k];}
                 else std::cerr<<"Missing texture: "<<a.cpu.textures.at(size_t(batch.material))<<'\n';
             }
@@ -264,7 +270,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
     auto draw_asset=[&](const std::string& name,const Mat4& model,unsigned phase=0) {
         auto it=assets.find(name);if(it==assets.end())return;
         for(const auto& b:it->second.gpu) {
-            auto transformed=b.rotor?model*rotate_about_z(b.center,float(water_time)*7.5f+float((phase*977)%512)*6.2831853f/512.f):model;
+            auto transformed=b.rotor?model*rotate_about_x(b.center,float(water_time)*7.5f+float((phase*977)%512)*6.2831853f/512.f):model;
             if(b.alpha)translucent.push_back({&b,transformed,length(transform(transformed,b.center)-eye())});else render_batch(b,transformed,vp,{1,1,1});
         }
     };
@@ -278,7 +284,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
         draw_asset(terrain,Mat4::identity());draw_asset(water,Mat4::identity());auto catalog=document.catalog();
         // INST keeps a destroyed mesh slot, but it is an alternate state.  It
         // must not be visible until battle damage marks that furniture destroyed.
-        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],instance(document,i),i);}
+        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size()){draw_asset(catalog[slot-1],instance(document,i),i);if(lower(catalog[slot-1])=="_4windm2.m3d")draw_asset(windmill_sails,instance(document,i)*translate({0,19,0}),i);}}
     }
     if(battle.phase==Phase::Deployment){
         std::vector<m3d::Vertex> lines;
