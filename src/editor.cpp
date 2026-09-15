@@ -59,7 +59,7 @@ Editor::Editor(const std::string& path):doc(prj::Document::blank(128,128)),canva
     for(auto c:{&view_choice,&layer_choice}) c->signal_changed().connect([this]{canvas.invalidate();});
     nibble_order.signal_toggled().connect([this]{canvas.invalidate();}); show_objects.signal_toggled().connect([this]{canvas.queue_draw();scene.queue_render();});
     labeled(objects_panel,"Mesh for placement",mesh_choice);
-    add_button(objects_panel,"Add mesh filename…",[this]{add_catalog();});
+    add_button(objects_panel,"Add furniture mesh…",[this]{add_catalog();});
     object_store=Gtk::ListStore::create(columns); object_list.set_model(object_store);
     object_list.append_column("#",columns.index); object_list.append_column("Mesh",columns.name);
     object_scroll.add(object_list); object_scroll.set_policy(Gtk::POLICY_AUTOMATIC,Gtk::POLICY_AUTOMATIC); object_scroll.set_size_request(-1,150);
@@ -237,11 +237,20 @@ void Editor::history(bool redo) {
     to.push_back(doc.encode()); trim_history(to); doc=prj::Document::decode(from.back()); from.pop_back(); selected=-1; refresh();
 }
 void Editor::add_catalog() {
-    Gtk::Dialog dialog("Add furniture mesh",*this,true); Gtk::Entry name;
-    labeled(*dialog.get_content_area(),"Mesh filename relative to mission folder",name);
-    dialog.add_button("Cancel",Gtk::RESPONSE_CANCEL); dialog.add_button("Add",Gtk::RESPONSE_OK); dialog.show_all_children();
-    if(dialog.run()!=Gtk::RESPONSE_OK) return;
-    dialog.hide(); mutate([this,&name]{doc.add_mesh(name.get_text());}); mesh_choice.set_active(int(doc.catalog().size())-1);
+    Gtk::FileChooserDialog chooser(*this,"Add furniture mesh",Gtk::FILE_CHOOSER_ACTION_OPEN);
+    chooser.add_button("Cancel",Gtk::RESPONSE_CANCEL);chooser.add_button("Add",Gtk::RESPONSE_OK);
+    auto filter=Gtk::FileFilter::create();filter->set_name("Dark Omen furniture meshes (*.m3d)");filter->add_pattern("*.m3d");filter->add_pattern("*.M3D");chooser.add_filter(filter);
+    if(!asset_directory.empty())chooser.set_current_folder(asset_directory);
+    if(chooser.run()!=Gtk::RESPONSE_OK)return;
+    auto path=std::filesystem::path(chooser.get_filename());chooser.hide();
+    auto extension=path.extension().string();std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return char(std::tolower(c));});
+    if(extension!=".m3d"){error("Choose a Dark Omen .m3d furniture mesh.");return;}
+    std::string name=path.generic_string();
+    if(!asset_directory.empty()) {
+        std::error_code ec;auto relative=std::filesystem::relative(path,asset_directory,ec);
+        if(!ec)name=relative.generic_string();
+    }
+    mutate([this,&name]{doc.add_mesh(name);});mesh_choice.set_active(int(doc.catalog().size())-1);
 }
 bool Editor::on_key_press_event(GdkEventKey* e) {
     if(e->state&GDK_CONTROL_MASK) {
