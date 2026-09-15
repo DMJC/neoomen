@@ -19,7 +19,7 @@ No game files are bundled. The editor opens PRJs directly, without a configured 
 
 ## 3D scene and camera
 
-Opening a PRJ displays its textured **3D scene**. The viewer loads terrain and water from the referenced `.M3X` files and furniture from the `.M3D` catalog, applying the PRJ instance positions and rotations. BMP textures resolve from `TEXTURE`, `LTEXTURE`, or the mission folder, with case-insensitive path lookup. It supports repeating UVs, cutout foliage, translucent water, depth testing and simple directional shading.
+Opening a PRJ displays its textured **3D scene**. The viewer forces terrain and water references to `.M3X`, loads every group as a combined mesh, and loads furniture from the literal `.M3D` catalog. It applies the complete PRJ instance transform and both the primary and destroyed mesh slots. BMP textures resolve from `TEXTURE`, `LTEXTURE`, or the mission folder, with case-insensitive path lookup. It supports filename render flags for translucency, transparency, colour-key cutouts and animated UVs; water uses UV scrolling rather than vertex animation.
 
 - **Left drag:** orbit around the camera target.
 - **Middle/right drag:** pan in the camera plane.
@@ -50,7 +50,7 @@ Keyboard shortcuts: Ctrl+N / Ctrl+O / Ctrl+S, Ctrl+Shift+S (Save As), Ctrl+Z, Ct
 
 ## Scope and format limits
 
-This editor renders existing M3D/M3X meshes and BMP textures, but does not generate or modify those assets. It does not implement SHD/LIT lighting, BTB battle boundaries, armies or CTL mission scripts. The preview uses simple shading and static water UVs; it does not reproduce all game lighting/animation effects. Editing PRJ heights changes the terrain grids, **not the visible terrain mesh**. A PRJ alone is not a complete playable mission; game-side validation of saved edits has not been performed.
+This editor renders existing M3D/M3X meshes and BMP textures, but does not generate or modify those assets. It does not implement SHD/LIT lighting, BTB battle boundaries, armies or CTL mission scripts. Water has the documented animated-UV flag, although the original scroll speed was not recovered. BTB-driven animated furniture subparts, such as windmill rotors, belong to the game-object system and are not represented by PRJ instances. Editing PRJ heights changes the terrain grids, **not the visible terrain mesh**. A PRJ alone is not a complete playable mission; game-side validation of saved edits has not been performed.
 
 The two height layers are independently editable. The source notes do not establish which is movement versus line of sight, or confirm conversion between raw terrain heights and furniture world Y. The 2D view consequently does not snap furniture Y to terrain-grid heights. Placement in the 3D view instead intersects the actual mesh surface.
 

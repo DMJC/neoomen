@@ -18,9 +18,11 @@ layout(location=1) in vec3 normal;
 layout(location=2) in vec2 texcoord;
 uniform mat4 mvp;
 uniform mat4 model;
+uniform bool animateUv;
+uniform float uvTime;
 out vec2 uv;
 out vec3 n;
-void main() {gl_Position=mvp*vec4(position,1);uv=texcoord;n=mat3(model)*normal;}
+void main() {gl_Position=mvp*vec4(position,1);uv=texcoord+(animateUv?vec2(.012,-.018)*uvTime:vec2(0));n=mat3(model)*normal;}
 )";
     const char* fragment=R"(#version 330 core
 in vec2 uv;
@@ -70,7 +72,7 @@ void SceneView::on_realize() {
     if(has_error()) {info="OpenGL unavailable. Use the 2D terrain editor.";message.emit(info);return;}
     try {
         program=make_program();matrix_location=glGetUniformLocation(program,"mvp");model_location=glGetUniformLocation(program,"model");
-        tint_location=glGetUniformLocation(program,"selected");opacity_location=glGetUniformLocation(program,"opacity");
+        tint_location=glGetUniformLocation(program,"selected");opacity_location=glGetUniformLocation(program,"opacity");uv_time_location=glGetUniformLocation(program,"uvTime");animate_uv_location=glGetUniformLocation(program,"animateUv");
         glUseProgram(program);glUniform1i(glGetUniformLocation(program,"image"),0);glUseProgram(0);
         glGenTextures(1,&white);glBindTexture(GL_TEXTURE_2D,white);const uint8_t pixel[]={210,205,190,255};
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
@@ -81,7 +83,7 @@ void SceneView::on_realize() {
 void SceneView::destroy_meshes() {
     for(auto& pair:assets) for(auto& b:pair.second.batches) {glDeleteBuffers(1,&b.vbo);glDeleteVertexArrays(1,&b.vao);}
     for(auto id:textures) glDeleteTextures(1,&id);
-    textures.clear();assets.clear();triangles=0;
+    textures.clear();assets.clear();triangles=0;animated_uv=false;
 }
 void SceneView::destroy_gl() {destroy_meshes();if(white)glDeleteTextures(1,&white);if(program)glDeleteProgram(program);white=program=0;}
 void SceneView::on_unrealize() {make_current();if(!has_error())destroy_gl();Gtk::GLArea::on_unrealize();}
@@ -139,7 +141,8 @@ void SceneView::load_scene() {
             auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);auto& asset=assets[name];asset.mesh=std::move(model);
             for(auto& batch:asset.mesh.batches) {
                 GpuBatch gpu;bool keying=((batch.flags|m3d::render_flags(name))&16)!=0;
-                gpu.translucent=name==water_key || ((batch.flags|m3d::render_flags(name))&1)!=0;
+                auto flags=batch.flags|m3d::render_flags(name);
+                gpu.translucent=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.animate_uv=(flags&2)!=0;animated_uv=animated_uv||gpu.animate_uv;
                 gpu.texture=white;
                 if(batch.material>=0) {
                     const auto& filename=asset.mesh.textures.at(size_t(batch.material));auto texture_file=m3d::texture_path(root,filename);
@@ -179,7 +182,14 @@ void SceneView::load_scene() {
 Vec3 SceneView::eye() const {return target+Vec3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),std::cos(yaw)*std::cos(pitch)}*distance;}
 void SceneView::fit() {
     auto it=assets.find(base_key);
-    if(it!=assets.end()) {target=(it->second.mesh.minimum+it->second.mesh.maximum)*0.5f;radius=std::max(1.0f,length(it->second.mesh.maximum-it->second.mesh.minimum)*0.5f);}
+    if(it!=assets.end()) {
+        auto minimum=it->second.mesh.minimum,maximum=it->second.mesh.maximum;
+        if(auto water=assets.find(water_key);water!=assets.end()){
+            minimum={std::min(minimum.x,water->second.mesh.minimum.x),std::min(minimum.y,water->second.mesh.minimum.y),std::min(minimum.z,water->second.mesh.minimum.z)};
+            maximum={std::max(maximum.x,water->second.mesh.maximum.x),std::max(maximum.y,water->second.mesh.maximum.y),std::max(maximum.z,water->second.mesh.maximum.z)};
+        }
+        target=(minimum+maximum)*0.5f;radius=std::max(1.0f,length(maximum-minimum)*0.5f);
+    }
     else {target={app.doc.width()*0.5f,0,app.doc.height()*0.5f};radius=std::max(app.doc.width(),app.doc.height())*0.7f;}
     float aspect=float(std::max(1,get_allocated_width()))/std::max(1,get_allocated_height());
     float angle=std::min(0.42f,std::atan(std::tan(0.42f)*aspect));distance=radius/std::sin(angle)*1.08f;queue_render();
@@ -200,17 +210,18 @@ bool SceneView::on_render(const Glib::RefPtr<Gdk::GLContext>&) {
     enqueue(base_key,Mat4::identity(),false);if(!water_key.empty())enqueue(water_key,Mat4::identity(),false);
     auto catalog=app.doc.catalog();
     if(app.show_objects.get_active())for(uint32_t i=0;i<app.doc.instance_count();++i) {
-        auto slot=app.doc.field(i,0x40);if(slot && slot<=catalog.size())enqueue(catalog[slot-1],instance(app.doc,i),int(i)==app.selected);
+        auto model=instance(app.doc,i);for(auto field:{0x40u,0x7cu}){auto slot=app.doc.field(i,field);if(slot && slot<=catalog.size())enqueue(catalog[slot-1],model,int(i)==app.selected);}
     }
     auto draw=[&](const Draw& d) {
         auto mvp=vp*d.model;glUniformMatrix4fv(matrix_location,1,GL_FALSE,mvp.v);glUniformMatrix4fv(model_location,1,GL_FALSE,d.model.v);
-        glUniform1f(tint_location,d.selected?1:0);glUniform1f(opacity_location,d.batch->translucent?0.65f:1);
+        glUniform1f(tint_location,d.selected?1:0);glUniform1f(opacity_location,d.batch->opacity);
+        glUniform1i(animate_uv_location,d.batch->animate_uv);glUniform1f(uv_time_location,float(g_get_monotonic_time()/1000000.0));
         glBindTexture(GL_TEXTURE_2D,d.batch->texture);glBindVertexArray(d.batch->vao);glDrawArrays(GL_TRIANGLES,0,d.batch->count);
     };
     glDisable(GL_BLEND);glDepthMask(GL_TRUE);for(auto& d:opaque)draw(d);
     std::sort(transparent.begin(),transparent.end(),[](const Draw& a,const Draw& b){return a.depth>b.depth;});
     glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);for(auto& d:transparent)draw(d);
-    glDepthMask(GL_TRUE);glDisable(GL_BLEND);glBindVertexArray(0);glBindTexture(GL_TEXTURE_2D,0);glUseProgram(0);++frames;frame_rendered.emit();return true;
+    glDepthMask(GL_TRUE);glDisable(GL_BLEND);glBindVertexArray(0);glBindTexture(GL_TEXTURE_2D,0);glUseProgram(0);++frames;if(animated_uv)queue_render();frame_rendered.emit();return true;
 }
 bool SceneView::on_button_press_event(GdkEventButton* e) {
     if(e->button>3)return false;

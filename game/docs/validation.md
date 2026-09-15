@@ -65,7 +65,7 @@ Deployment banner drag/drop integration tests pass with original B1_01 terrain: 
 
 All 41 installed SHD files decode successfully. Core tests verify signed base/detail reconstruction, shared dictionary addressing, partial edge tiles, bad offsets and truncated data. Sprite tests verify black transparency and cyan conversion to translucent black. The original-data OpenGL test loads B1_01's 184x200 SHD grid and renders the terrain, sprites and UI without GL errors. Both builds and all six standalone tests pass. Shadow light direction and strength remain provisional.
 
-Water animation: original B1_01 OpenGL frame comparisons with fixed units/camera detect changing pixels while running and identical output across paused frames. Both game builds succeed. The deformation is confined to WATR batches; its wave/UV parameters remain provisional.
+Water animation: original B1_01 OpenGL frame comparisons with fixed units/camera detect changing pixels while running and identical output across paused frames. Both game builds succeed. UV scrolling is confined to batches with the documented animated-UV flag; its speed remains provisional.
 
 ## In-mission talking heads (2026-09-15)
 

@@ -21,13 +21,8 @@ out vec2 uv;out vec3 n;out vec3 world;
 void main(){
 vec3 p=position;vec3 surfaceNormal=normal;uv=texcoord;
 if(animateWater){
-    // World-space phases keep duplicated vertices and neighbouring patches joined.
-    vec3 base=(model*vec4(position,1)).xyz;
-    float a=dot(base.xz,vec2(.45,.20))+waterTime*1.2;
-    float b=dot(base.xz,vec2(-.18,.65))-waterTime*1.8;
-    p.y+=.12*sin(a)+.06*sin(b);
-    float dx=.054*cos(a)-.0108*cos(b),dz=.024*cos(a)+.039*cos(b);
-    surfaceNormal=normalize(vec3(-dx,1,-dz));
+    // _7WATER.M3X's groups are permanently combined.  Dark Omen records
+    // bit 1 as an animated-UV texture flag; it does not deform water vertices.
     uv+=vec2(.012,-.018)*waterTime;
 }
 gl_Position=mvp*vec4(p,1);n=mat3(model)*surfaceNormal;world=(model*vec4(p,1)).xyz;
@@ -146,7 +141,8 @@ void Renderer::load(const std::filesystem::path& file) {
         if(path.empty()){if(name==terrain)throw std::runtime_error("Missing terrain "+name);std::cerr<<"Missing mesh: "<<name<<'\n';continue;}
         auto& a=assets[name];a.cpu=m3d::Model::open(path);
         for(const auto& batch:a.cpu.batches) {
-            Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(name);gpu.alpha=name==water || (flags&1);gpu.water=name==water;
+            Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(name);
+            gpu.alpha=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.water=(flags&2)!=0;
             if(batch.material>=0) {
                 auto image=m3d::texture_path(root,a.cpu.textures.at(size_t(batch.material)));
                 if(!image.empty()) {std::string k=image.string()+((flags&16)?"|key":"|opaque");if(!cache.count(k))cache[k]=texture(image,(flags&16)!=0);gpu.texture=cache[k];}
@@ -158,7 +154,12 @@ void Renderer::load(const std::filesystem::path& file) {
         }
         triangles+=a.cpu.triangles;
     }
-    auto& mesh=assets.at(terrain).cpu;center=(mesh.minimum+mesh.maximum)*.5f;radius=std::max(1.f,length(mesh.maximum-mesh.minimum)*.5f);fit();
+    auto bounds=assets.at(terrain).cpu;
+    if(auto it=assets.find(water);it!=assets.end()){
+        bounds.minimum={std::min(bounds.minimum.x,it->second.cpu.minimum.x),std::min(bounds.minimum.y,it->second.cpu.minimum.y),std::min(bounds.minimum.z,it->second.cpu.minimum.z)};
+        bounds.maximum={std::max(bounds.maximum.x,it->second.cpu.maximum.x),std::max(bounds.maximum.y,it->second.cpu.maximum.y),std::max(bounds.maximum.z,it->second.cpu.maximum.z)};
+    }
+    center=(bounds.minimum+bounds.maximum)*.5f;radius=std::max(1.f,length(bounds.maximum-bounds.minimum)*.5f);fit();
     std::cout<<"Loaded "<<file.filename()<<": "<<triangles<<" unique mesh triangles, "<<document.instance_count()<<" furniture instances\n";
 }
 Vec3 Renderer::eye() const {return target+Vec3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),std::cos(yaw)*std::cos(pitch)}*distance;}
@@ -246,7 +247,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
         immediate(floor,vp,{.22f,.3f,.18f});
     } else {
         draw_asset(terrain,Mat4::identity());draw_asset(water,Mat4::identity());auto catalog=document.catalog();
-        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],instance(document,i));}
+        for(unsigned i=0;i<document.instance_count();++i){auto model=instance(document,i);for(auto field:{0x40u,0x7cu}){auto slot=document.field(i,field);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],model);}}
     }
     if(battle.phase==Phase::Deployment){
         std::vector<m3d::Vertex> lines;
@@ -299,7 +300,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
     }
     std::sort(translucent.begin(),translucent.end(),[](const Draw& a,const Draw& b){return a.depth>b.depth;});
     glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDepthMask(GL_FALSE);
-    for(const auto& d:translucent)render_batch(*d.batch,d.model,vp,{1,1,1},.65f);
+    for(const auto& d:translucent)render_batch(*d.batch,d.model,vp,{1,1,1},d.batch->opacity);
     scene_shadows=false;glDepthMask(GL_TRUE);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);
     glBindVertexArray(0);glUseProgram(0);
 }
