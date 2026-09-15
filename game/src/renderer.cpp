@@ -8,6 +8,8 @@ using namespace math3d;
 namespace neo {
 namespace {
 constexpr const char* windmill_sails="../../Furnture/BATTLE/_GSAILS.M3D";
+constexpr const char* stone_windmill_sails="../../Furnture/BATTLE/_KSAILS.M3D";
+constexpr const char* waterwheel="../../Furnture/BATTLE/_GWHEEL.M3D";
 std::string lower(std::string value) {for(auto& c:value)c=char(std::tolower(static_cast<unsigned char>(c)));return value;}
 GLuint shader(GLenum type,const char* source) {
     GLuint s=glCreateShader(type);glShaderSource(s,1,&source,nullptr);glCompileShader(s);GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
@@ -143,7 +145,7 @@ void Renderer::load(const std::filesystem::path& file) {
     }
     auto mesh_name=[](std::string name){std::filesystem::path p(name);p.replace_extension(".M3X");return p.string();};
     terrain=mesh_name(document.mesh());water=document.mesh(true).empty()?"":mesh_name(document.mesh(true));
-    auto names=document.catalog();names.push_back(terrain);if(!water.empty())names.push_back(water);names.push_back(windmill_sails);
+    auto names=document.catalog();names.push_back(terrain);if(!water.empty())names.push_back(water);names.push_back(windmill_sails);names.push_back(stone_windmill_sails);names.push_back(waterwheel);
     std::map<std::string,GLuint> cache;
     for(const auto& name:names) {
         if(assets.count(name))continue;
@@ -161,7 +163,10 @@ void Renderer::load(const std::filesystem::path& file) {
                 auto material=lower(a.cpu.textures.at(size_t(batch.material)));
                 // Windmill models keep the body and the sails in one M3D.  The
                 // sail material identifies the detachable rotating sub-part.
-                gpu.rotor=material.find("sails")!=std::string::npos || name==windmill_sails;
+                gpu.rotor=name==windmill_sails || name==stone_windmill_sails || name==waterwheel;
+                // _KWINDML carries a small static sail-texture proxy.  Its
+                // actual animated blades are the matching _KSAILS model.
+                gpu.hidden=lower(name)=="_kwindml.m3d" && material.find("sails")!=std::string::npos;
                 auto image=m3d::texture_path(path.parent_path(),a.cpu.textures.at(size_t(batch.material)));
                 if(!image.empty()) {std::string k=image.string()+((flags&16)?"|key":"|opaque");if(!cache.count(k))cache[k]=texture(image,(flags&16)!=0);gpu.texture=cache[k];}
                 else std::cerr<<"Missing texture: "<<a.cpu.textures.at(size_t(batch.material))<<'\n';
@@ -270,6 +275,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
     auto draw_asset=[&](const std::string& name,const Mat4& model,unsigned phase=0) {
         auto it=assets.find(name);if(it==assets.end())return;
         for(const auto& b:it->second.gpu) {
+            if(b.hidden)continue;
             auto transformed=b.rotor?model*rotate_about_x(b.center,float(water_time)*1.875f+float((phase*977)%512)*6.2831853f/512.f):model;
             if(b.alpha)translucent.push_back({&b,transformed,length(transform(transformed,b.center)-eye())});else render_batch(b,transformed,vp,{1,1,1});
         }
@@ -284,7 +290,13 @@ void Renderer::draw(const Battle& battle,bool paused) {
         draw_asset(terrain,Mat4::identity());draw_asset(water,Mat4::identity());auto catalog=document.catalog();
         // INST keeps a destroyed mesh slot, but it is an alternate state.  It
         // must not be visible until battle damage marks that furniture destroyed.
-        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size()){draw_asset(catalog[slot-1],instance(document,i),i);if(lower(catalog[slot-1])=="_4windm2.m3d")draw_asset(windmill_sails,instance(document,i)*translate({0,19,0}),i);}}
+        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size()){
+            const auto& name=catalog[slot-1];auto model=instance(document,i);draw_asset(name,model,i);
+            auto kind=lower(name);
+            if(kind=="_4windm2.m3d")draw_asset(windmill_sails,model*translate({0,19,0}),i);
+            else if(kind=="_kwindml.m3d")draw_asset(stone_windmill_sails,model*translate({-10.5816f,1.5f,0}),i);
+            else if(kind=="_4watmil.m3d")draw_asset(waterwheel,model,i);
+        }}
     }
     if(battle.phase==Phase::Deployment){
         std::vector<m3d::Vertex> lines;
