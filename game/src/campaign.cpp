@@ -15,6 +15,15 @@ bool compare(int32_t a,uint32_t op,int32_t b) {
     switch(op){case 1:return a==b;case 2:return a!=b;case 3:return a<b;case 4:return a>b;default:throw std::runtime_error("Invalid campaign comparison");}
 }
 void valid_pc(uint32_t p){if(p<0x4c3c48 || p>=0x4ccd28 || (p&3))throw std::runtime_error("Campaign PC outside script blob");}
+constexpr size_t original_save_size=0x4a34;
+constexpr size_t original_chapter_offset=0x5a;
+constexpr size_t original_army_offset=0x1f8;
+constexpr size_t original_army_limit=0x18c0;
+std::string original_string(const prj::Bytes& bytes,size_t offset,size_t length) {
+    if(offset>bytes.size() || length>bytes.size()-offset)throw std::runtime_error("Truncated original save string");
+    auto begin=bytes.begin()+offset,end=std::find(begin,begin+length,0);
+    return {begin,end};
+}
 }
 Campaign::Campaign(const std::filesystem::path& root):executable(m3d::resolve(root,"PRG_ENG/DarkOmen.exe")) {
     army=Army::decode(read_file(m3d::resolve(root,"GameData/1PARM/PLYR_ALL.ARM")));
@@ -123,6 +132,7 @@ void Campaign::advance() {
     if(state==CampaignState::Running)throw std::runtime_error("Campaign instruction budget exhausted");
 }
 void Campaign::answer(unsigned choice) {
+    if(original_save)return;
     if(state==CampaignState::Choice){if(choice>=choices.size())throw std::runtime_error("Invalid campaign choice");value=int32_t(choice);}
     else if(state!=CampaignState::Dialogue)return;
     state=CampaignState::Running;choices.clear();advance();
@@ -146,7 +156,34 @@ void Campaign::save(const std::filesystem::path& path) const {
     out<<presentation.markers.size()<<'\n';for(const auto& m:presentation.markers)out<<m[0]<<' '<<m[1]<<' '<<m[2]<<'\n';
     auto data=out.str();auto temp=path;temp+=".tmp";{std::ofstream file(temp,std::ios::binary);file<<data;file.close();if(!file)throw std::runtime_error("Cannot save campaign");}std::filesystem::rename(temp,path);
 }
+void Campaign::restore_original_save(const prj::Bytes& bytes) {
+    if(bytes.size()!=original_save_size)throw std::runtime_error("Original save has an invalid size");
+    auto count=prj::u32(bytes,original_army_offset+4);
+    if(count>30 || original_army_offset+192+size_t(count)*188>original_army_limit)throw std::runtime_error("Original save has an invalid army roster");
+    prj::Bytes roster(bytes.begin()+original_army_offset,bytes.begin()+original_army_offset+192+size_t(count)*188);
+    Army saved=Army::decode(roster);
+    auto description=original_string(bytes,0,90),chapter=original_string(bytes,original_chapter_offset,98);
+    if(description.empty() || chapter.empty())throw std::runtime_error("Original save has no campaign description");
+
+    // The game stores its campaign VM as rebased process pointers.  The documented
+    // layout lets us recover the persistent ARM roster safely, but those pointers
+    // cannot be resumed by this independent interpreter yet.
+    Campaign next=*this;
+    next.army=std::move(saved);
+    next.magic.clear();
+    for(size_t i=0;i<40;++i)if(auto item=bytes[original_army_offset+0x96+i];item!=0 && item!=0xff)next.magic.push_back(item);
+    next.state=CampaignState::Dialogue;
+    next.presentation={};next.presentation.screen=CampaignScreen::Book;
+    next.message="Original save loaded: "+description+"\n"+chapter+" — army and inventory are available in the book.";
+    next.mission=chapter;
+    next.choices.clear();next.stack.clear();next.memory.clear();next.objectives.clear();next.screen_returns.clear();
+    next.cursor=0x4c3d68;next.mission_index=0;next.value=0;next.completed=0;next.instructions=0;
+    next.original_save=true;
+    *this=std::move(next);
+}
 void Campaign::restore(const std::filesystem::path& path) {
+    auto bytes=read_file(path);
+    if(bytes.size()==original_save_size){restore_original_save(bytes);return;}
     // Parse into a copy; malformed saves cannot partially modify the active campaign.
     Campaign next=*this;std::ifstream in(path);std::string magicWord;unsigned version=0,status=0;in>>magicWord>>version;
     if(magicWord!="NEOOMEN_CAMPAIGN" || (version!=1 && version!=2))throw std::runtime_error("Unsupported campaign save");
@@ -168,6 +205,6 @@ void Campaign::restore(const std::filesystem::path& path) {
     }else if(next.message.rfind("Dialogue: ",0)==0){next.presentation.screen=CampaignScreen::TalkingHead;next.presentation.speech=next.message.substr(10);}
     else if(next.message.rfind("Meeting point: ",0)==0){next.presentation.screen=CampaignScreen::Meeting;next.presentation.background=next.message.substr(15);}
     else if(next.message.rfind("Army book",0)==0)next.presentation.screen=CampaignScreen::Book;
-    in>>std::ws;if(!in.eof())throw std::runtime_error("Trailing campaign save data");if(in.bad() || in.fail())throw std::runtime_error("Truncated campaign save");*this=std::move(next);
+    in>>std::ws;if(!in.eof())throw std::runtime_error("Trailing campaign save data");if(in.bad() || in.fail())throw std::runtime_error("Truncated campaign save");next.original_save=false;*this=std::move(next);
 }
 }

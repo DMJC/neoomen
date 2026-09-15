@@ -59,7 +59,7 @@ int main(int argc,char** argv) {
                 "  --autostart --hidden --mute\n  --skip-intro         Open the main menu immediately\n"
                 "Controls: left select, Shift add, right order, middle orbit, wheel zoom,\n"
                 "WASD pan, F fit, Enter begin, Space pause, R reset, M mute, Esc menu.\n"
-                "--campaign: original campaign progression; --resume: load checkpoint.\n  --save FILE: checkpoint path; F5 save / F9 restore (mission restarts).\n  --no-ctl: sandbox AI instead of original mission scripts.\n";return 0;}
+                "--campaign: original campaign progression; --resume: load NeoOmen checkpoint or original DarkOmen.### save.\n  --save FILE: checkpoint path; F5 save / F9 restore (mission restarts).\n  --no-ctl: sandbox AI instead of original mission scripts.\n";return 0;}
             else if(arg=="--skip-intro")options.skip_intro=true;
             else if(arg=="--campaign")options.campaign=true;else if(arg=="--resume"){options.resume=true;options.campaign=true;}
             else if(arg=="--save")options.save=value();else if(arg=="--no-ctl")options.no_ctl=true;

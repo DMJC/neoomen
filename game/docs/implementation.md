@@ -12,7 +12,7 @@ Source documentation is in `../doreverse/reversing/` relative to the workspace r
 | Sprites | Original registry, raw indexed frames, palette banks, signed anchors, eight-direction idle/walk/attack visual runs and OpenGL billboards | Full animation opcode side effects, death sequences and original formation geometry |
 | Audio | MAD/SAD decoding, SDL stereo mixer, WAV effects, dialogue ducking, bounded output queue, original FSM sequence/state-table playback, mute and movie suspension | Verified source rates, exact FSM random weighting and context selection, positional audio, complete regiment/CTL/animation sound mappings |
 | Scripts | Bounded CTL VM, functions, control flow, registers, flags, timers, events and provisional battle adapters | Remaining opcodes, exact host side effects, original execution trace comparisons |
-| Campaign | Original embedded script, branches, roster activation, casualty carryover, gold, mission transitions, native checkpoints | Remaining presentation, purchases/equipment, SAV compatibility |
+| Campaign | Original embedded script, branches, roster activation, casualty carryover, gold, mission transitions, native checkpoints, original SAV roster/inventory import | Remaining presentation, purchases/equipment, continuation from original SAV VM state |
 
 ## Relevant documentation
 

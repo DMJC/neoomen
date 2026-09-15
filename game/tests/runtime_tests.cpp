@@ -53,6 +53,15 @@ int main(int argc,char** argv){try {
     loss.complete_mission(false,survivors);bool retained=false;for(auto& r:loss.army.regiments)if(r.id==id)retained=r.alive==alive;check(retained,"Casualty carryover");
     auto pc=loss.pc();{std::ofstream out(save);out<<"NEOOMEN_CAMPAIGN 1\n";}
     bool rejected=false;try{loss.restore(save);}catch(const std::exception&){rejected=true;}check(rejected && pc==loss.pc(),"Invalid save mutated campaign");
+    auto native=root/"SaveGame"/"darkomen.000";
+    if(std::filesystem::is_regular_file(native)){
+        neo::Campaign imported(root);imported.restore(native);
+        check(imported.loaded_original_save(),"Original save was not detected");
+        check(imported.army.regiments.size()==24 && imported.army.gold==4113,"Original save ARM roster");
+        check(imported.presentation.screen==neo::CampaignScreen::Book && imported.mission=="Trading Post 1","Original save campaign metadata");
+        auto imported_gold=imported.army.gold;{std::ofstream out(save,std::ios::binary);std::string corrupt(0x4a34,'\0');out.write(corrupt.data(),corrupt.size());}
+        rejected=false;try{imported.restore(save);}catch(const std::exception&){rejected=true;}check(rejected && imported.army.gold==imported_gold,"Invalid original save mutated campaign");
+    }
     auto path=m3d::resolve(root,"GameData/1pbat/B1_01/B1_01.BTB");auto setup=neo::BattleSetup::decode(neo::read_file(path));
     neo::Battle battle;battle.reset(neo::Army::decode(neo::read_file(m3d::resolve(path.parent_path(),setup.player_army+".ARM"))),neo::Army::decode(neo::read_file(m3d::resolve(path.parent_path(),setup.enemy_army+".ARM"))),{},100);
     battle.deploy(setup);battle.attach_script(neo::read_file(m3d::resolve(path.parent_path(),setup.script+".CTL")),setup);battle.start();
