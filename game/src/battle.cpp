@@ -29,21 +29,46 @@ void Battle::say(size_t unit,unsigned clip){
     speech_queue.push_back({unit,clip,ticks});
 }
 void Battle::start() {if(phase==Phase::Deployment)phase=Phase::Battle;}
+void Battle::set_terrain(unsigned width,unsigned height,float min_x,float max_x,float min_z,float max_z,std::vector<uint8_t> attributes,std::vector<float> heights){
+    if(!width || !height || attributes.size()!=size_t(width)*height || heights.size()!=size_t(width)*height || max_x<=min_x || max_z<=min_z)throw std::runtime_error("Invalid battle terrain");
+    terrain={width,height,min_x,max_x,min_z,max_z,std::move(attributes),std::move(heights)};
+}
+bool Battle::terrain_blocked(Vec3 point) const {
+    if(!terrain.width)return false;
+    auto x=unsigned(std::clamp((point.x-terrain.min_x)/(terrain.max_x-terrain.min_x)*float(terrain.width-1),0.f,float(terrain.width-1)));
+    auto z=unsigned(std::clamp((point.z-terrain.min_z)/(terrain.max_z-terrain.min_z)*float(terrain.height-1),0.f,float(terrain.height-1)));
+    return terrain.attributes[size_t(z)*terrain.width+x]&(2|8);
+}
+bool Battle::terrain_clear(Vec3 a,Vec3 b) const {
+    if(!terrain.width)return true;
+    auto cell=[&](Vec3 p){return std::array<int,2>{
+        int(std::lround(std::clamp((p.x-terrain.min_x)/(terrain.max_x-terrain.min_x)*float(terrain.width-1),0.f,float(terrain.width-1)))),
+        int(std::lround(std::clamp((p.z-terrain.min_z)/(terrain.max_z-terrain.min_z)*float(terrain.height-1),0.f,float(terrain.height-1))))};};
+    auto start=cell(a),end=cell(b);int dx=std::abs(end[0]-start[0]),sx=start[0]<end[0]?1:-1,dz=-std::abs(end[1]-start[1]),sz=start[1]<end[1]?1:-1,error=dx+dz,steps=std::max(dx,-dz),n=0;
+    float ay=terrain.heights[size_t(start[1])*terrain.width+start[0]],by=terrain.heights[size_t(end[1])*terrain.width+end[0]];
+    for(;;){float line=ay+(by-ay)*float(n)/std::max(1,steps);if(terrain.heights[size_t(start[1])*terrain.width+start[0]]>line+.25f)return false;if(start==end)break;int twice=2*error;if(twice>=dz){error+=dz;start[0]+=sx;}if(twice<=dx){error+=dx;start[1]+=sz;}++n;}return true;
+}
+bool Battle::occupied(const Unit& self,Vec3 point) const {for(const auto& other:units)if(&other!=&self && other.regiment.alive && !other.routing && length(Vec3{other.position.x-point.x,0,other.position.z-point.z})<5)return true;return false;}
 bool Battle::can_deploy(Vec3 point,unsigned troops) const {
     if(deployment.empty())return true;
     for(unsigned i=0;i<troops;++i){float x=point.x+(float(i%5)-2)*1.2f,z=point.z+float(i/5)*1.2f;
+        if(terrain_blocked({x,0,z}))return false;
         if(!std::any_of(deployment.begin(),deployment.end(),[&](const BattleRegion& r){return r.contains(x-.45f,z-.45f)&&r.contains(x+.45f,z+.45f)&&r.contains(x-.45f,z+.45f)&&r.contains(x+.45f,z-.45f);}))return false;
     }return true;
 }
-bool Battle::can_shoot(const Unit& u) const {return u.regiment.missile_weapon!=0 || (u.regiment.unit_class&0xf8)==32;}
-float Battle::shoot_range(const Unit& u) const {return (u.regiment.unit_class&0xf8)==32?120.f:70.f;}
+bool Battle::is_artillery(const Unit& u) const {return (u.regiment.unit_class&0xf8)==32;}
+bool Battle::can_shoot(const Unit& u) const {return u.regiment.missile_weapon!=0 || is_artillery(u);}
+float Battle::shoot_range(const Unit& u) const {return is_artillery(u)?150.f:70.f;}
+bool Battle::can_fire_at(const Unit& u,Vec3 point) const {Vec3 delta=point-u.position;delta.y=0;return phase==Phase::Battle && is_artillery(u) && u.regiment.alive && !u.routing && u.cooldown==0 && length(delta)<=shoot_range(u) && terrain_clear(u.position,point);}
+bool Battle::fire_artillery(Vec3 point){bool fired=false;for(size_t i=0;i<units.size();++i){auto& u=units[i];if(!u.selected || !can_fire_at(u,point))continue;int target=-1;for(size_t j=0;j<units.size();++j)if(units[j].enemy && units[j].regiment.alive && length(units[j].position-point)<6){target=int(j);break;}Vec3 start=u.position+Vec3{0,2.5f,0};projectiles.push_back({start,start,point+Vec3{0,.8f,0},int(i),target,0,std::clamp(length(point-start)/95.f,.25f,1.5f),target>=0,true,false,3});u.cooldown=5;fired=true;}return fired;}
 bool Battle::order(Vec3 point,int target) {
     if(phase==Phase::Victory || phase==Phase::Defeat)return false;
     size_t ordinal=0;
     if(phase==Phase::Deployment)for(const auto& u:units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing){if(!can_deploy(point+Vec3{float(ordinal++)*7,0,0},u.regiment.alive))return false;}
     ordinal=0;bool ordered=false;
     for(auto& u:units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing) {
-        u.destination=point+Vec3{float(ordinal++)*7,0,0};u.target=target;u.moving=true;ordered=true;
+        auto destination=point+Vec3{float(ordinal++)*7,0,0};if(terrain_blocked(destination) || !terrain_clear(u.position,destination) || (target<0 && occupied(u,destination)))continue;
+        u.destination=destination;u.target=target;u.moving=true;ordered=true;
         if(u.command==UnitCommand::Halt || u.command==UnitCommand::Break)u.command=UnitCommand::Automatic;
         if(u.command==UnitCommand::Shoot && target>=0)u.moving=false;
         if(phase==Phase::Deployment) {u.position=u.destination;u.moving=false;u.target=-1;}
@@ -105,7 +130,6 @@ void Battle::tick() {
     // Flight and impact are separate from firing, so volleys do not deal damage instantly.
     for(auto& shot:projectiles){
         shot.age+=dt;float t=std::min(1.f,shot.age/shot.duration);shot.position=shot.start*(1-t)+shot.end*t;
-        shot.position.y+=3.5f*std::sin(t*3.14159265f);
         if(t==1 && shot.hit && shot.target>=0 && size_t(shot.target)<units.size() && units[size_t(shot.target)].regiment.alive)damage[size_t(shot.target)]+=shot.damage;
     }
     projectiles.erase(std::remove_if(projectiles.begin(),projectiles.end(),[](const Projectile& shot){return shot.age>=shot.duration;}),projectiles.end());
@@ -145,14 +169,14 @@ void Battle::tick() {
             if(!ranged){u.engaged=true;units[size_t(u.target)].engaged=true;}
             if(u.cooldown==0) {
                 if(ranged){
-                    const auto& target=units[size_t(u.target)];unsigned shots=std::min(24u,unsigned(u.regiment.alive));
+                    const auto& target=units[size_t(u.target)];unsigned shots=is_artillery(u)?1:std::min(24u,unsigned(u.regiment.alive));
                     for(unsigned shot=0;shot<shots && projectiles.size()<128;++shot){
                         Vec3 start=u.position+Vec3{(float(shot%5)-2)*.7f,1.5f,float(shot/5)*.7f};
                         Vec3 end=target.position+Vec3{float(int(random()%7)-3)*.35f,.5f,float(int(random()%7)-3)*.35f};
                         float flight=std::clamp(length(end-start)/70.f,.18f,1.5f);
-                        projectiles.push_back({start,start,end,int(i),u.target,0,flight,resolve_missile(u,target),(u.regiment.unit_class&0xf8)==32});
+                        projectiles.push_back({start,start,end,int(i),u.target,0,flight,resolve_missile(u,target)&&terrain_clear(start,end),is_artillery(u)});
                     }
-                    u.cooldown=3.f;++ranged_attacks;
+                    u.cooldown=is_artillery(u)?5.f:3.f;++ranged_attacks;
                 }else{
                     // Representative melee hit/wound/save stages, not the original lookup tables.
                     unsigned hits=0;for(unsigned n=0;n<u.regiment.alive;++n)if(random()%6+1>=4 && random()%6+1>=4 && random()%6+1<5)++hits;
@@ -161,7 +185,7 @@ void Battle::tick() {
             }
         } else if(u.moving) {
             if(distance>0.001f)u.heading=std::atan2(delta.x,delta.z);
-            float step=std::min(distance,(u.command==UnitCommand::Charge && u.charge_time>0?13.f:8.f)*dt);u.position=u.position+normal(delta)*step;
+            float step=std::min(distance,(u.command==UnitCommand::Charge && u.charge_time>0?13.f:8.f)*dt);auto next=u.position+normal(delta)*step;if(terrain_blocked(next) || !terrain_clear(u.position,next) || (u.target<0 && occupied(u,next))){u.moving=false;u.destination=u.position;}else u.position=next;
             if(distance<=step){u.moving=false;if(u.command==UnitCommand::Break)u.command=UnitCommand::Halt;}
         }
     }

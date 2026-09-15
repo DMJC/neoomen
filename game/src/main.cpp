@@ -22,7 +22,7 @@ std::string lower(std::string s) {for(auto& c:s)if(c>='A' && c<='Z')c=char(c+32)
 void inspect(const std::filesystem::path& path) {
     auto ext=lower(path.extension().string());auto bytes=neo::read_file(path);
     if(ext==".arm") {auto a=neo::Army::decode(bytes);std::cout<<a.regiments.size()<<" regiments, "<<a.gold<<" gold\n";for(const auto& r:a.regiments)std::cout<<r.id<<" "<<r.name<<" ("<<unsigned(r.alive)<<"/"<<unsigned(r.maximum)<<")\n";}
-    else if(ext==".btb") {auto setup=neo::BattleSetup::decode(bytes);std::cout<<setup.width<<"x"<<setup.height<<" BTB units, "<<setup.nodes.size()<<" nodes, "<<setup.player_army<<" / "<<setup.enemy_army<<" / "<<setup.script<<"\n";for(const auto& c:neo::decode_btb(bytes))std::cout<<"Chunk "<<c.type<<": "<<c.payload.size()<<" bytes\n";}
+    else if(ext==".btb") {auto setup=neo::BattleSetup::decode(bytes);std::cout<<setup.width<<"x"<<setup.height<<" BTB units, "<<setup.nodes.size()<<" nodes, "<<setup.player_army<<" / "<<setup.enemy_army<<" / "<<setup.script<<"\n";for(const auto& n:setup.nodes)std::cout<<"Object type="<<n.flags<<" x="<<n.x<<" z="<<n.z<<" heading="<<n.heading<<" group="<<n.group<<" unit="<<n.unit_id<<"\n";for(const auto& c:neo::decode_btb(bytes))std::cout<<"Chunk "<<c.type<<": "<<c.payload.size()<<" bytes\n";}
     else if(ext==".mad" || ext==".sad") {auto pcm=neo::decode_adpcm(bytes,ext==".sad"?2:1);std::cout<<pcm.channels<<" channels, "<<pcm.samples.size()/pcm.channels<<" PCM frames\n";}
     else if(ext==".spr") {auto n=prj::u32(bytes,28);for(unsigned i=0;i<n;++i)neo::decode_sprite(bytes,i);std::cout<<n<<" sprite frames decoded\n";}
     else if(ext==".prj") {auto d=prj::Document::decode(bytes);std::cout<<d.width()<<"x"<<d.height()<<", "<<d.instance_count()<<" furniture instances\n";}
@@ -113,6 +113,7 @@ int main(int argc,char** argv) {
         neo::Battle battle;std::string script_error;
         auto reset=[&](){
             script_error.clear();battle.reset(player,enemy,renderer.center,renderer.radius);
+            renderer.configure(battle);
             if(setup){std::cout<<"Applied "<<battle.deploy(*setup)<<" BTB unit positions\n";
                 if(!options.no_ctl && !setup->script.empty())try{battle.attach_script(neo::read_file(m3d::resolve(options.mission.parent_path(),setup->script+".CTL")),*setup);}catch(const std::exception& e){script_error=e.what();std::cerr<<script_error<<'\n';}
             }

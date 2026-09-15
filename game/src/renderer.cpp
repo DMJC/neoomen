@@ -7,6 +7,7 @@
 using namespace math3d;
 namespace neo {
 namespace {
+std::string lower(std::string value) {for(auto& c:value)c=char(std::tolower(static_cast<unsigned char>(c)));return value;}
 GLuint shader(GLenum type,const char* source) {
     GLuint s=glCreateShader(type);glShaderSource(s,1,&source,nullptr);glCompileShader(s);GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
     if(!ok) {char log[4096];glGetShaderInfoLog(s,sizeof(log),nullptr,log);glDeleteShader(s);throw std::runtime_error(log);}return s;
@@ -53,6 +54,13 @@ void triangle(std::vector<m3d::Vertex>& v,Vec3 a,Vec3 b,Vec3 c) {
 }
 void rectangle(std::vector<m3d::Vertex>& v,float x,float y,float w,float h) {
     for(Vec3 p: {Vec3{x,y,0},Vec3{x+w,y,0},Vec3{x+w,y+h,0},Vec3{x,y,0},Vec3{x+w,y+h,0},Vec3{x,y+h,0}})v.push_back({p,{},0,0});
+}
+Mat4 rotate_about_z(Vec3 pivot,float angle) {
+    Mat4 m=Mat4::identity();float c=std::cos(angle),s=std::sin(angle);
+    m.v[0]=c;m.v[1]=s;m.v[4]=-s;m.v[5]=c;
+    m.v[12]=pivot.x-c*pivot.x+s*pivot.y;
+    m.v[13]=pivot.y-s*pivot.x-c*pivot.y;
+    return m;
 }
 const std::map<char,std::string> glyphs={
 {'A',"01110100011000111111100011000110001"},{'B',"11110100011000111110100011000111110"},
@@ -144,6 +152,10 @@ void Renderer::load(const std::filesystem::path& file) {
             Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(name);
             gpu.alpha=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.water=(flags&2)!=0;
             if(batch.material>=0) {
+                auto material=lower(a.cpu.textures.at(size_t(batch.material)));
+                // Windmill models keep the body and the sails in one M3D.  The
+                // sail material identifies the detachable rotating sub-part.
+                gpu.rotor=material.find("sails")!=std::string::npos;
                 auto image=m3d::texture_path(root,a.cpu.textures.at(size_t(batch.material)));
                 if(!image.empty()) {std::string k=image.string()+((flags&16)?"|key":"|opaque");if(!cache.count(k))cache[k]=texture(image,(flags&16)!=0);gpu.texture=cache[k];}
                 else std::cerr<<"Missing texture: "<<a.cpu.textures.at(size_t(batch.material))<<'\n';
@@ -161,6 +173,20 @@ void Renderer::load(const std::filesystem::path& file) {
     }
     center=(bounds.minimum+bounds.maximum)*.5f;radius=std::max(1.f,length(bounds.maximum-bounds.minimum)*.5f);fit();
     std::cout<<"Loaded "<<file.filename()<<": "<<triangles<<" unique mesh triangles, "<<document.instance_count()<<" furniture instances\n";
+}
+void Renderer::configure(Battle& battle) const {
+    const auto width=document.attr_width(),height=document.attr_height();
+    auto mesh=assets.find(terrain);
+    if(!width || !height || mesh==assets.end() || document.width()!=width || document.height()!=height)return;
+    std::vector<uint8_t> attributes;std::vector<float> heights;
+    attributes.reserve(size_t(width)*height);heights.reserve(size_t(width)*height);
+    for(unsigned z=0;z<height;++z)for(unsigned x=0;x<width;++x) {
+        attributes.push_back(document.attribute(x,z));
+        heights.push_back(float(document.elevation(0,x,z))/1024.f);
+    }
+    battle.set_terrain(width,height,mesh->second.cpu.minimum.x,mesh->second.cpu.maximum.x,
+                       mesh->second.cpu.minimum.z,mesh->second.cpu.maximum.z,
+                       std::move(attributes),std::move(heights));
 }
 Vec3 Renderer::eye() const {return target+Vec3{std::sin(yaw)*std::cos(pitch),std::sin(pitch),std::cos(yaw)*std::cos(pitch)}*distance;}
 void Renderer::fit() {target=center;distance=radius*2.8f;}
@@ -235,9 +261,12 @@ void Renderer::draw(const Battle& battle,bool paused) {
     scene_shadows=true;glUseProgram(program);glUniform1i(glGetUniformLocation(program,"spritePass"),0);
     glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glDisable(GL_BLEND);glDepthMask(GL_TRUE);auto vp=view_projection();
     struct Draw {const Batch* batch;Mat4 model;float depth;};std::vector<Draw> translucent;
-    auto draw_asset=[&](const std::string& name,const Mat4& model) {
+    auto draw_asset=[&](const std::string& name,const Mat4& model,unsigned phase=0) {
         auto it=assets.find(name);if(it==assets.end())return;
-        for(const auto& b:it->second.gpu) {if(b.alpha)translucent.push_back({&b,model,length(transform(model,b.center)-eye())});else render_batch(b,model,vp,{1,1,1});}
+        for(const auto& b:it->second.gpu) {
+            auto transformed=b.rotor?model*rotate_about_z(b.center,float(water_time)*7.5f+float((phase*977)%512)*6.2831853f/512.f):model;
+            if(b.alpha)translucent.push_back({&b,transformed,length(transform(transformed,b.center)-eye())});else render_batch(b,transformed,vp,{1,1,1});
+        }
     };
     if(assets.empty()) {
         std::vector<m3d::Vertex> floor;
@@ -249,7 +278,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
         draw_asset(terrain,Mat4::identity());draw_asset(water,Mat4::identity());auto catalog=document.catalog();
         // INST keeps a destroyed mesh slot, but it is an alternate state.  It
         // must not be visible until battle damage marks that furniture destroyed.
-        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],instance(document,i));}
+        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],instance(document,i),i);}
     }
     if(battle.phase==Phase::Deployment){
         std::vector<m3d::Vertex> lines;

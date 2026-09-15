@@ -43,12 +43,16 @@ public:
     void attach_script(const prj::Bytes&,const BattleSetup&);
     std::shared_ptr<CtlRuntime> scripts;
     void start();
+    void set_terrain(unsigned,unsigned,float,float,float,float,std::vector<uint8_t>,std::vector<float>);
     bool order(math3d::Vec3 point,int target=-1);
     bool command(UnitCommand);
     // Cast the selected wizard's provisional Arcane Bolt at a nearby hostile unit.
     bool cast_magic();
     bool can_cast_magic(const Unit&) const;
     bool can_shoot(const Unit&) const;
+    bool is_artillery(const Unit&) const;
+    bool can_fire_at(const Unit&,math3d::Vec3) const;
+    bool fire_artillery(math3d::Vec3);
     float shoot_range(const Unit&) const;
     bool can_deploy(math3d::Vec3,unsigned troops) const;
     std::vector<BattleRegion> deployment;
@@ -56,6 +60,10 @@ public:
     static constexpr unsigned magic_capacity=10;
     void tick();
 private:
+    struct Terrain {unsigned width=0,height=0;float min_x=0,max_x=0,min_z=0,max_z=0;std::vector<uint8_t> attributes;std::vector<float> heights;} terrain;
+    bool terrain_clear(math3d::Vec3,math3d::Vec3) const;
+    bool terrain_blocked(math3d::Vec3) const;
+    bool occupied(const Unit&,math3d::Vec3) const;
     std::mt19937 random{1};
 };
 }

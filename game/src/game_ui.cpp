@@ -141,6 +141,7 @@ std::string GameUi::battle_cursor(const Battle& battle,int x,int y,bool shift,bo
             if(!battle.can_deploy(point+math3d::Vec3{float(ordinal++)*7,0,0},unit.regiment.alive))return "ARROW1";
         return "MOVE";
     }
+    if(battle.is_artillery(*selected))return battle.can_fire_at(*selected,point)?"HAND2":"HAND4";
     float distance=std::hypot(point.x-selected->position.x,point.z-selected->position.z);
     if(shift || (distance>=33 && distance<=81))return "ROTATE";
     if(distance>81)return "MOVE";
@@ -213,6 +214,11 @@ bool GameUi::battle_event(Battle& battle,const SDL_Event& e){
     Unit* selected=nullptr;for(auto& unit:battle.units)if(unit.selected && !unit.enemy && unit.regiment.alive && !unit.routing){selected=&unit;break;}
     if(!selected)return false;
     if(battle.phase==Phase::Deployment){order_feedback(battle.order(point));if(notice.empty())audio.cue();return true;}
+    if(battle.is_artillery(*selected)){
+        notice=battle.fire_artillery(point)?"":"TARGET BLOCKED";
+        if(notice.empty())audio.effect("CANNON");
+        return true;
+    }
     float distance=std::hypot(point.x-selected->position.x,point.z-selected->position.z);
     if(shift || (distance>=33 && distance<=81)){
         facing_unit=int(selected-&battle.units[0]);update_facing(battle,e.button.x,e.button.y);SDL_CaptureMouse(SDL_TRUE);return true;
