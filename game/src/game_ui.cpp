@@ -8,7 +8,8 @@ namespace {
 const math3d::Vec3 ink{.15f,.09f,.035f},gold{1,.8f,.35f},dim{.35f,.35f,.35f};
 bool hit(math3d::Vec3 p,float x,float y,float w,float h){return p.x>=x && p.x<x+w && p.y>=y && p.y<y+h;}
 struct HudRect {float x,y,w,h;bool contains(Vec3 p)const{return hit(p,x,y,w,h);}};
-constexpr HudRect magic_button{397,365,78,34};
+// The original mage controls use a five-slot strip: four spells and one item.
+constexpr HudRect magic_button{224,354,190,62};
 constexpr HudRect command_button(unsigned i){return {510+float(i%2)*62,362+float(i/2)*57,58,54};}
 }
 GameUi::GameUi(Renderer& r,Audio& a,const std::filesystem::path& data):renderer(r),audio(a),root(data){if(!root.empty())executable=std::make_unique<Executable>(m3d::resolve(root,"PRG_ENG/DarkOmen.exe"));}
@@ -111,7 +112,7 @@ void GameUi::update_drag(const Battle& battle,int x,int y){
         renderer.ground(float(x),float(y),drag_point) && battle.can_deploy(drag_point,battle.units[size_t(drag_unit)].regiment.alive);
 }
 bool GameUi::covers_battle(const Battle& battle,Vec3 p) const {
-    if(hit(p,0,0,640,20) || hit(p,132,338,190,110) || hit(p,345,338,132,122))return true;
+    if(hit(p,0,0,640,20) || hit(p,132,338,85,110) || magic_button.contains(p))return true;
     for(unsigned i=0;i<4;++i)if(command_button(i).contains(p))return true;
     if(battle.phase==Phase::Deployment && (hit(p,8,335,110,135) || hit(p,510,317,120,20)))return true;
     return battle.voice_active && mission_portrait && hit(p,8,337,110,133);
@@ -195,7 +196,7 @@ void GameUi::mission_dialogue(Battle& battle){
         }catch(const std::exception& e){std::cerr<<"Mission dialogue: "<<e.what()<<'\n';}
     }
     if(battle.voice_active && mission_portrait){
-        renderer.ui_rect(8,337,110,133,{.1f,.08f,.04f});float mouth=0;size_t at=size_t(elapsed*22050);
+        float mouth=0;size_t at=size_t(elapsed*22050);
         for(size_t i=at;i<std::min(at+256,mission_speech.samples.size());++i)mouth+=std::abs(float(mission_speech.samples[i]));
         try{renderer.portrait(root,mission_head,9,338,108,112,std::min(1.f,mouth/(256*6000.f)),elapsed);}
         catch(const std::exception& e){mission_portrait=false;std::cerr<<"Mission portrait: "<<e.what()<<'\n';}
@@ -221,18 +222,25 @@ void GameUi::battle_draw(Battle& battle,bool paused){
     }
     if(battle.phase==Phase::Deployment){renderer.ui_text(14,455,"PREV",gold);renderer.ui_text(66,455,"NEXT",gold);}
     const Unit* selected=nullptr;for(const auto& u:battle.units)if(u.selected && !u.enemy){selected=&u;break;}
-    if(selected){wrapped(132,349,selected->regiment.name,31,gold);renderer.ui_text(132,382,"STRENGTH "+std::to_string(selected->regiment.alive)+" / "+std::to_string(selected->regiment.maximum),gold);
-        renderer.ui_rect(132,398,190,12,{.2f,.15f,.12f});renderer.ui_rect(132,398,190.f*selected->regiment.alive/std::max(1u,unsigned(selected->regiment.maximum)),12,{.65f,.1f,.08f});
-        renderer.ui_text(132,420,"MORALE "+std::to_string(int(selected->morale)),gold);
-        const char* orders[]={"READY","HALTED","SHOOTING","BREAKING OFF","CHARGING"};renderer.ui_text(132,436,orders[unsigned(selected->command)],gold);
+    if(selected){
+        renderer.ui_text(132,349,selected->regiment.name,gold,.85f);
+        renderer.ui_text(132,365,"STRENGTH",gold,.75f);
+        renderer.ui_rect(132,378,80,7,{.22f,.15f,.12f});renderer.ui_rect(132,378,80.f*selected->regiment.alive/std::max(1u,unsigned(selected->regiment.maximum)),7,{.8f,.18f,.1f});
+        renderer.ui_text(132,394,std::to_string(selected->regiment.alive)+" / "+std::to_string(selected->regiment.maximum),gold,.75f);
+        renderer.ui_text(132,410,"MORALE "+std::to_string(int(selected->morale)),gold,.75f);
+        const char* orders[]={"READY","HALTED","SHOOTING","BREAKING OFF","CHARGING"};renderer.ui_text(132,425,orders[unsigned(selected->command)],gold,.75f);
+        if(selected->regiment.wizard){
+            // PANELS frames 1, 2 and 3 form the original five-slot spell tray.
+            for(unsigned slot=0;slot<5;++slot){float x=224+slot*38.f;image("Graphics/Sprites/PANELS.SPR",slot==0?1:slot==4?3:2,x,354,38,62);}
+            for(unsigned spell=0;spell<4;++spell)image("Graphics/Books/spells.spr",(selected->regiment.magic_book*4+spell)%32,227+spell*38,367,31,31);
+            auto item=selected->regiment.items[0];if(item!=65535 && item<72)image("Graphics/Books/MAG_ITEM.SPR",item,379,367,31,31);
+            bool magic_enabled=battle.can_cast_magic(*selected);renderer.ui_text(250,404,"CAST G",magic_enabled?(hovered_magic?math3d::Vec3{.8f,.65f,1.f}:gold):dim,.7f);
+        }
     }else renderer.ui_text(132,354,"SELECT A REGIMENT BANNER",gold);
-    renderer.ui_text(345,343,"MAGIC",gold,.85f);renderer.ui_rect(355,362,23,66,{.1f,.08f,.15f});float power=66.f*battle.magic_power/Battle::magic_capacity;renderer.ui_rect(355,428-power,23,power,{.25f,.4f,1});renderer.ui_text(403,413,std::to_string(battle.magic_power)+" / "+std::to_string(Battle::magic_capacity),gold);
-    bool magic_enabled=selected && battle.can_cast_magic(*selected);renderer.ui_text(403,369,"CAST G",magic_enabled?(hovered_magic?math3d::Vec3{.8f,.65f,1.f}:gold):dim,.9f);renderer.ui_text(403,381,"ARCANE BOLT",magic_enabled?(hovered_magic?math3d::Vec3{.8f,.65f,1.f}:gold):dim,.65f);
-    const auto magic_color=magic_enabled?gold:dim;
-    renderer.ui_rect(magic_button.x,magic_button.y,magic_button.w,1,magic_color);renderer.ui_rect(magic_button.x,magic_button.y+magic_button.h-1,magic_button.w,1,magic_color);
-    renderer.ui_rect(magic_button.x,magic_button.y,1,magic_button.h,magic_color);renderer.ui_rect(magic_button.x+magic_button.w-1,magic_button.y,1,magic_button.h,magic_color);
-    renderer.ui_text(345,438,"WINDS "+std::to_string(unsigned(std::ceil(battle.magic_countdown)))+" SECONDS",gold);renderer.ui_rect(345,452,132,6,{.1f,.1f,.15f});renderer.ui_rect(345,452,132*battle.magic_countdown/30,6,{.4f,.5f,1});
-    renderer.ui_text(507,343,"COMBAT CONTROLS",gold,.85f);
+    // Frame 0 is the original transparent combat-control surround. It carries
+    // the strength and Winds windows shown by the reference HUD.
+    image("Graphics/Sprites/PANELS.SPR",0,490,338,150,138);
+    renderer.ui_text(507,414,std::to_string(battle.magic_power),gold);
     const char* labels[]={"HALT H","SHOOT T","BREAK B","CHARGE C"};unsigned frames[]={0,3,9,12};UnitCommand commands[]={UnitCommand::Halt,UnitCommand::Shoot,UnitCommand::Break,UnitCommand::Charge};
     for(unsigned i=0;i<4;++i){const auto rect=command_button(i);float x=rect.x,y=rect.y;bool enabled=selected && selected->regiment.alive && !selected->routing && battle.phase==Phase::Battle && (i!=1 || battle.can_shoot(*selected));
         bool active=enabled && selected->command==commands[i];bool hover=enabled && hovered_command==int(i);
