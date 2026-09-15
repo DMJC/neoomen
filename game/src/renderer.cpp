@@ -23,7 +23,7 @@ vec3 p=position;vec3 surfaceNormal=normal;uv=texcoord;
 if(animateWater){
     // _7WATER.M3X's groups are permanently combined.  Dark Omen records
     // bit 1 as an animated-UV texture flag; it does not deform water vertices.
-    uv+=vec2(.012,-.018)*waterTime;
+    uv+=vec2(-.024,.036)*waterTime;
 }
 gl_Position=mvp*vec4(p,1);n=mat3(model)*surfaceNormal;world=(model*vec4(p,1)).xyz;
 })";
@@ -247,7 +247,9 @@ void Renderer::draw(const Battle& battle,bool paused) {
         immediate(floor,vp,{.22f,.3f,.18f});
     } else {
         draw_asset(terrain,Mat4::identity());draw_asset(water,Mat4::identity());auto catalog=document.catalog();
-        for(unsigned i=0;i<document.instance_count();++i){auto model=instance(document,i);for(auto field:{0x40u,0x7cu}){auto slot=document.field(i,field);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],model);}}
+        // INST keeps a destroyed mesh slot, but it is an alternate state.  It
+        // must not be visible until battle damage marks that furniture destroyed.
+        for(unsigned i=0;i<document.instance_count();++i){auto slot=document.field(i,0x40);if(slot && slot<=catalog.size())draw_asset(catalog[slot-1],instance(document,i));}
     }
     if(battle.phase==Phase::Deployment){
         std::vector<m3d::Vertex> lines;

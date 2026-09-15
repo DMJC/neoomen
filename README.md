@@ -19,7 +19,7 @@ No game files are bundled. The editor opens PRJs directly, without a configured 
 
 ## 3D scene and camera
 
-Opening a PRJ displays its textured **3D scene**. The viewer forces terrain and water references to `.M3X`, loads every group as a combined mesh, and loads furniture from the literal `.M3D` catalog. It applies the complete PRJ instance transform and both the primary and destroyed mesh slots. BMP textures resolve from `TEXTURE`, `LTEXTURE`, or the mission folder, with case-insensitive path lookup. It supports filename render flags for translucency, transparency, colour-key cutouts and animated UVs; water uses UV scrolling rather than vertex animation.
+Opening a PRJ displays its textured **3D scene**. The viewer forces terrain and water references to `.M3X`, loads every group as a combined mesh, and loads the healthy furniture mesh from the literal `.M3D` catalog under its complete PRJ instance transform. The destroyed mesh slot is preserved for runtime damage, rather than drawn over the healthy instance. BMP textures resolve from `TEXTURE`, `LTEXTURE`, or the mission folder, with case-insensitive path lookup. It supports filename render flags for translucency, transparency, colour-key cutouts and animated UVs; water uses UV scrolling rather than vertex animation.
 
 - **Left drag:** orbit around the camera target.
 - **Middle/right drag:** pan in the camera plane.

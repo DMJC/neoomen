@@ -22,7 +22,7 @@ uniform bool animateUv;
 uniform float uvTime;
 out vec2 uv;
 out vec3 n;
-void main() {gl_Position=mvp*vec4(position,1);uv=texcoord+(animateUv?vec2(.012,-.018)*uvTime:vec2(0));n=mat3(model)*normal;}
+void main() {gl_Position=mvp*vec4(position,1);uv=texcoord+(animateUv?vec2(-.024,.036)*uvTime:vec2(0));n=mat3(model)*normal;}
 )";
     const char* fragment=R"(#version 330 core
 in vec2 uv;
@@ -210,7 +210,9 @@ bool SceneView::on_render(const Glib::RefPtr<Gdk::GLContext>&) {
     enqueue(base_key,Mat4::identity(),false);if(!water_key.empty())enqueue(water_key,Mat4::identity(),false);
     auto catalog=app.doc.catalog();
     if(app.show_objects.get_active())for(uint32_t i=0;i<app.doc.instance_count();++i) {
-        auto model=instance(app.doc,i);for(auto field:{0x40u,0x7cu}){auto slot=app.doc.field(i,field);if(slot && slot<=catalog.size())enqueue(catalog[slot-1],model,int(i)==app.selected);}
+        // The dead-mesh slot is an alternate runtime state, not a second mesh
+        // to draw over a healthy furniture instance in the editor.
+        auto slot=app.doc.field(i,0x40);if(slot && slot<=catalog.size())enqueue(catalog[slot-1],instance(app.doc,i),int(i)==app.selected);
     }
     auto draw=[&](const Draw& d) {
         auto mvp=vp*d.model;glUniformMatrix4fv(matrix_location,1,GL_FALSE,mvp.v);glUniformMatrix4fv(model_location,1,GL_FALSE,d.model.v);

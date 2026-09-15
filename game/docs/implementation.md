@@ -5,7 +5,7 @@ Source documentation is in `../doreverse/reversing/` relative to the workspace r
 | Area | Implemented | Remaining original behavior |
 |---|---|---|
 | Platform | SDL2 events/window, OpenGL 4.3 core, fixed 30 Hz sandbox, resizing, HiDPI, resource cleanup | Original timing and state transitions |
-| Map rendering | PRJ/M3D/M3X, forced terrain/water M3X loading, combined mesh groups, primary/dead furniture transforms, filename render flags, UV-scrolling water, BMP textures, palette-zero cutouts, sorted transparency, terrain ray picking, SHD height-grid occlusion | LIT, original lighting, BTB animated-furniture subparts, exact water UV-scroll timing, effects |
+| Map rendering | PRJ/M3D/M3X, forced terrain/water M3X loading, combined mesh groups, healthy furniture transforms with preserved destroyed slots, filename render flags, UV-scrolling water, BMP textures, palette-zero cutouts, sorted transparency, terrain ray picking, SHD height-grid occlusion | Furniture damage-state transitions, BTB animated-furniture subparts, original lighting, exact water UV-scroll timing, effects |
 | Armies | ARM 192-byte header and 188-byte records, identity/name/sprite/count/attributes/gold | Full stat record interpretation, original formations |
 | Battle setup | BTB roster filenames and game-object positions joined to ARM IDs; formation-aware deployment regions, selection and orders | Obstacles, objectives and complete spawn conditions |
 | Battle simulation | Deterministic sandbox movement, CTL engage/charge/retreat/hold/search orders, missile projectiles and impact resolution, hit/wound/save stages, morale/routing and end state | Original dice tables, missile profiles, collision/cover, member movement, magic and mission AI |
