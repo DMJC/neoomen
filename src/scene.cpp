@@ -140,7 +140,7 @@ void SceneView::load_scene() {
         auto path=m3d::resolve(root,name);
         if(path.empty()) {issues.push_back("Missing mesh: "+name);continue;}
         try {
-            auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);else if(name!=water_key)for(auto& batch:model.batches){for(size_t i=0;i+2<batch.vertices.size();i+=3)std::swap(batch.vertices[i+1],batch.vertices[i+2]);for(auto& vertex:batch.vertices)vertex.normal=vertex.normal*-1.f;}auto& asset=assets[name];asset.mesh=std::move(model);
+            auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);else if(name!=water_key)for(auto& batch:model.batches)for(auto& vertex:batch.vertices)vertex.normal=vertex.normal*-1.f;auto& asset=assets[name];asset.mesh=std::move(model);
             for(auto& batch:asset.mesh.batches) {
                 GpuBatch gpu;bool keying=((batch.flags|m3d::render_flags(name))&16)!=0;
                 auto flags=batch.flags|m3d::render_flags(name);

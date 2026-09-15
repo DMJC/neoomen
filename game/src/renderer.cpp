@@ -154,7 +154,6 @@ void Renderer::load(const std::filesystem::path& file) {
         if(path.empty()){if(name==terrain)throw std::runtime_error("Missing terrain "+name);std::cerr<<"Missing mesh: "<<name<<'\n';continue;}
         auto& a=assets[name];a.cpu=m3d::Model::open(path);
         if(name!=terrain && name!=water)for(auto& batch:a.cpu.batches) {
-            for(size_t i=0;i+2<batch.vertices.size();i+=3)std::swap(batch.vertices[i+1],batch.vertices[i+2]);
             for(auto& vertex:batch.vertices)vertex.normal=vertex.normal*-1.f;
         }
         for(const auto& batch:a.cpu.batches) {
