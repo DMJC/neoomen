@@ -14,6 +14,10 @@ std::string str(const prj::Bytes& b,size_t p,size_t len) {
     need(p<=b.size() && len<=b.size()-p,"Truncated M3D string");auto end=std::find(b.begin()+p,b.begin()+p+len,0);return {b.begin()+p,end};
 }
 std::string lower(std::string s) {for(auto& c:s) if(c>='A' && c<='Z') c=char(c+'a'-'A');return s;}
+void append16(prj::Bytes& b,uint16_t value) {b.push_back(uint8_t(value));b.push_back(uint8_t(value>>8));}
+void append32(prj::Bytes& b,uint32_t value) {for(unsigned i=0;i<4;++i)b.push_back(uint8_t(value>>(i*8)));}
+void append_float(prj::Bytes& b,float value) {uint32_t bits;std::memcpy(&bits,&value,sizeof(bits));append32(b,bits);}
+void patch16(prj::Bytes& b,size_t offset,uint16_t value) {b.at(offset)=uint8_t(value);b.at(offset+1)=uint8_t(value>>8);}
 }
 unsigned render_flags(const std::string& s) {
     if(s.size()<2 || s[0]!='_') return 0;
@@ -57,6 +61,28 @@ Model Model::open(const std::filesystem::path& path) {
     std::ifstream file(path,std::ios::binary|std::ios::ate);if(!file) throw std::runtime_error("Missing mesh: "+path.string());
     auto size=file.tellg();need(size>=0 && size<=128*1024*1024,"Invalid M3D file size");file.seekg(0);
     prj::Bytes b(static_cast<size_t>(size));file.read(reinterpret_cast<char*>(b.data()),size);need(bool(file),"Cannot read M3D");return decode(b);
+}
+bool create_terrain_m3x(const std::filesystem::path& path,const prj::Document& doc,float cell_size,float origin_x,float origin_z) {
+    if(cell_size<=0 || !std::isfinite(cell_size))throw std::runtime_error("Terrain cell size must be positive");
+    std::error_code ec;if(std::filesystem::exists(path,ec))return false;if(ec)throw std::runtime_error("Cannot inspect M3X path: "+path.string());
+    const auto width=doc.width(),height=doc.height();uint32_t step=1,columns=0,rows=0;
+    do {columns=(width-1)/step+1;rows=(height-1)/step+1;if(uint64_t(columns)*rows<=65535 && uint64_t(columns-1)*(rows-1)*2<=65535)break;++step;}while(step<width || step<height);
+    if(columns<2 || rows<2)throw std::runtime_error("Terrain grid is too small for an M3X mesh");
+    prj::Bytes out(24,0);std::memcpy(out.data(),"PD3M",4);prj::put32(out,4,0x36243600);prj::put32(out,8,1);patch16(out,22,1);
+    size_t group=out.size();out.resize(out.size()+64,0);patch16(out,group+48,uint16_t(columns*rows));patch16(out,group+50,uint16_t((columns-1)*(rows-1)*2));
+    auto point=[&](uint32_t x,uint32_t z) {return Vec3{origin_x+float(std::min(x*step,width-1))*cell_size,float(doc.elevation(0,std::min(x*step,width-1),std::min(z*step,height-1)))/1024.f,origin_z+float(std::min(z*step,height-1))*cell_size};};
+    for(uint32_t z=0;z<rows-1;++z)for(uint32_t x=0;x<columns-1;++x) {
+        uint16_t a=uint16_t(z*columns+x),b=uint16_t((z+1)*columns+x),c=uint16_t(z*columns+x+1),d=uint16_t((z+1)*columns+x+1);
+        for(auto face:{std::array<uint16_t,3>{a,b,c},std::array<uint16_t,3>{c,b,d}}) {for(auto index:face)append16(out,index);append16(out,0xffff);out.resize(out.size()+20,0);}
+    }
+    for(uint32_t z=0;z<rows;++z)for(uint32_t x=0;x<columns;++x) {
+        auto p=point(x,z),left=point(x?x-1:x,z),right=point(std::min(x+1,columns-1),z),up=point(x,z?z-1:z),down=point(x,std::min(z+1,rows-1));
+        float dx=(right.y-left.y)/std::max(0.0001f,right.x-left.x);
+        float dz=(down.y-up.y)/std::max(0.0001f,down.z-up.z);float n=std::sqrt(dx*dx+dz*dz+1);
+        append_float(out,p.x);append_float(out,p.y);append_float(out,p.z);append_float(out,-dx/n);append_float(out,1/n);append_float(out,-dz/n);append32(out,0);append_float(out,float(x)/float(columns-1));append_float(out,float(z)/float(rows-1));append32(out,0);append32(out,0);
+    }
+    std::filesystem::create_directories(path.parent_path(),ec);if(ec)throw std::runtime_error("Cannot create M3X folder: "+path.parent_path().string());
+    std::ofstream file(path,std::ios::binary|std::ios::trunc);if(!file)throw std::runtime_error("Cannot create M3X: "+path.string());file.write(reinterpret_cast<const char*>(out.data()),std::streamsize(out.size()));if(!file)throw std::runtime_error("Cannot write M3X: "+path.string());return true;
 }
 std::filesystem::path resolve(const std::filesystem::path& root,const std::string& name) {
     std::string normalized=name;std::replace(normalized.begin(),normalized.end(),'\\','/');

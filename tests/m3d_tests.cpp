@@ -28,6 +28,10 @@ int main(int argc,char** argv) {try {
     auto basis=math3d::camera_basis({0,0,-10},{0,0,0});
     check(basis.right.x==1 && basis.up.y==1 && basis.forward.z==1,"Picking/panning must share Direct3D camera handedness");
     float hit=100;check(math3d::ray_triangle({0.25f,1,0.25f},{0,-1,0},{0,0,0},{1,0,0},{0,0,1},hit) && hit==1,"Picking ray");
+    auto terrain=prj::Document::blank(16,8);terrain.set_elevation(0,15,7,1024);auto generated=std::filesystem::path("/tmp/neoomen-generated-terrain.m3x");std::filesystem::remove(generated);
+    check(m3d::create_terrain_m3x(generated,terrain,2,10,20),"Generated M3X terrain");auto generated_mesh=m3d::Model::open(generated);
+    check(generated_mesh.triangles==210 && generated_mesh.maximum.x==40 && generated_mesh.maximum.z==34 && generated_mesh.maximum.y==1,"Generated terrain geometry");
+    check(!m3d::create_terrain_m3x(generated,terrain),"Existing M3X is preserved");
     size_t files=0,triangles=0;
     for(int arg=1;arg<argc;++arg)for(auto& entry:std::filesystem::recursive_directory_iterator(argv[arg])) {
         auto ext=entry.path().extension().string();if(ext!=".M3D" && ext!=".M3X" && ext!=".m3d" && ext!=".m3x")continue;

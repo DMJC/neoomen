@@ -17,6 +17,9 @@ struct Model {
     static Model open(const std::filesystem::path&);
 };
 unsigned render_flags(const std::string& name);
+// Writes a textureless terrain grid that mirrors layer A of a PRJ heightmap.
+// Returns false when an existing M3X is intentionally preserved.
+bool create_terrain_m3x(const std::filesystem::path&,const prj::Document&,float cell_size=1,float origin_x=0,float origin_z=0);
 // Resolves each path component with ASCII case folding, ignoring stale build paths.
 std::filesystem::path resolve(const std::filesystem::path& root, const std::string& relative);
 std::filesystem::path texture_path(const std::filesystem::path& root,const std::string& name);

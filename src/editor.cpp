@@ -216,7 +216,12 @@ bool Editor::save(bool as) {
         if(chooser.run()!=Gtk::RESPONSE_OK) return false;
         path=chooser.get_filename();
     }
-    try { doc.save(path); filename=path; saved=doc.encode(); update_title(); status("Saved "+path); return true; }
+    try {
+        doc.save(path);filename=path;asset_directory=std::filesystem::absolute(path).parent_path().string();
+        auto mesh=std::filesystem::path(doc.mesh());mesh.replace_extension(".m3x");if(mesh.is_absolute())mesh=mesh.filename();
+        auto generated=std::filesystem::path(asset_directory)/mesh;bool created=m3d::resolve(asset_directory,mesh.generic_string()).empty() && m3d::create_terrain_m3x(generated,doc,float(cell_size()),float(origin_x()),float(origin_z()));
+        saved=doc.encode();update_title();asset_entry.set_text(asset_directory);scene.sync();scene.reload();status("Saved "+path+(created?" • Created "+generated.filename().string():""));return true;
+    }
     catch(const std::exception& e) { error(e.what()); return false; }
 }
 void Editor::new_dialog() {
