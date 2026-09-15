@@ -14,6 +14,7 @@ public:
     sigc::signal<void> frame_rendered;
     size_t triangle_count() const {return triangles;}
     unsigned frame_count() const {return frames;}
+    uint64_t heightmap_revision() const {return heightmap_key;}
     const std::string& diagnostic() const {return info;}
 protected:
     void on_realize() override;
@@ -34,6 +35,7 @@ private:
     int matrix_location=-1,model_location=-1,tint_location=-1,opacity_location=-1;
     bool rebuild=true,auto_fit=true;
     std::string key,camera_key,base_key,water_key,info;
+    uint64_t heightmap_key=0;
     size_t triangles=0;
     unsigned frames=0;
     math3d::Vec3 target{64,0,64};
@@ -45,6 +47,7 @@ private:
     void destroy_meshes();
     void destroy_gl();
     void load_scene();
+    void apply_heightmap(m3d::Model&);
     unsigned texture(const std::filesystem::path&,bool color_key);
     void pick(double x,double y);
 };

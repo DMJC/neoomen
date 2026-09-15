@@ -32,9 +32,10 @@ int main() {
             check(editor.doc.attribute(64,64)==10,"Paint click failed");
             button(editor,"Undo");check(editor.doc.encode()==initial,"Undo failed");
             button(editor,"Redo");check(editor.doc.attribute(64,64)==10,"Redo failed");
-            editor.tool.set_active(3);click(editor.canvas,x,y);
+            auto heightmap=editor.scene.heightmap_revision();editor.tool.set_active(3);click(editor.canvas,x,y);
             check(editor.doc.elevation(0,64,64)==128,"Height click failed");
             check(editor.doc.elevation(1,64,64)==0,"Height layer isolation failed");
+            check(editor.scene.heightmap_revision()!=heightmap,"Height edit did not mark 3D terrain for rebuild");
             editor.doc.add_mesh("tree.m3d");editor.refresh();editor.tool.set_active(1);click(editor.canvas,x,y);
             check(editor.doc.instance_count()==1 && editor.doc.field(0,0x40)==1,"Placement failed");
             button(editor,"Duplicate");check(editor.doc.instance_count()==2,"Duplicate failed");

@@ -35,6 +35,9 @@ Editor::Editor(const std::string& path):doc(prj::Document::blank(128,128)),canva
     root.pack_start(split); split.pack1(views,true,false); split.pack2(tabs,false,false); split.set_position(840);
     tabs.set_size_request(330,-1);
     views.append_page(scene_panel,"3D scene"); views.append_page(canvas,"2D terrain editor");
+    views.signal_switch_page().connect([this](Gtk::Widget*,guint page){
+        if(page==0) {canvas.finish();scene.sync();scene.reload();status("3D scene rebuilt from the current heightmap");}
+    });
     scene_help.set_text("Left drag: orbit | Middle / right drag: pan | Wheel: zoom | F: fit | WASD: move | Click: select / place");
     scene_help.set_xalign(0); scene_help.set_line_wrap(true); scene_panel.pack_start(scene_help,Gtk::PACK_SHRINK);
     scene_panel.pack_start(scene);scene_info.set_xalign(0);scene_info.set_ellipsize(Pango::ELLIPSIZE_END);scene_panel.pack_start(scene_info,Gtk::PACK_SHRINK);

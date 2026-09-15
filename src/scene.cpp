@@ -44,6 +44,11 @@ void main() {
     glDeleteShader(vs);glDeleteShader(fs);return p;
 }
 std::string terrain_name(std::string s) {std::filesystem::path p(s);p.replace_extension(".m3x");return p.string();}
+uint64_t terrain_hash(const prj::Document& doc,double cell,double x,double z) {
+    uint64_t value=1469598103934665603ull;
+    auto add=[&](const void* data,size_t count){for(auto p=static_cast<const uint8_t*>(data);count--;){value^=*p++;value*=1099511628211ull;}};
+    add(doc.terrain.data(),doc.terrain.size());add(&cell,sizeof(cell));add(&x,sizeof(x));add(&z,sizeof(z));return value;
+}
 }
 SceneView::SceneView(Editor& e):app(e) {
     set_required_version(3,3);set_use_es(false);set_has_depth_buffer(true);set_auto_render(true);set_can_focus(true);
@@ -55,6 +60,8 @@ void SceneView::sync() {
     if(camera_key!=next) {camera_key=next;auto_fit=true;}
     for(auto& name:app.doc.catalog()) next+='\n'+name;
     if(key!=next) {key=next;rebuild=true;}
+    auto next_heightmap=terrain_hash(app.doc,app.cell_size(),app.origin_x(),app.origin_z());
+    if(heightmap_key!=next_heightmap) {heightmap_key=next_heightmap;rebuild=true;}
     queue_render();
 }
 void SceneView::reload() {rebuild=true;queue_render();}
@@ -101,6 +108,24 @@ unsigned SceneView::texture(const std::filesystem::path& path,bool color_key) {
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);glGenerateMipmap(GL_TEXTURE_2D);return id;
 }
+void SceneView::apply_heightmap(m3d::Model& model) {
+    const auto width=app.doc.width(),height=app.doc.height();const float cell=float(app.cell_size());
+    if(!width || !height || cell<=0)return;
+    auto sample=[&](float x,float z) {
+        float gx=std::clamp((x-float(app.origin_x()))/cell,0.f,float(width-1));
+        float gz=std::clamp((z-float(app.origin_z()))/cell,0.f,float(height-1));
+        auto x0=uint32_t(gx),z0=uint32_t(gz),x1=std::min(x0+1,width-1),z1=std::min(z0+1,height-1);float tx=gx-x0,tz=gz-z0;
+        auto h00=float(app.doc.elevation(0,x0,z0))/1024.f,h10=float(app.doc.elevation(0,x1,z0))/1024.f;
+        auto h01=float(app.doc.elevation(0,x0,z1))/1024.f,h11=float(app.doc.elevation(0,x1,z1))/1024.f;
+        return (h00+(h10-h00)*tx)+(h01+(h11-h01)*tx-(h00+(h10-h00)*tx))*tz;
+    };
+    model.minimum={1e30f,1e30f,1e30f};model.maximum={-1e30f,-1e30f,-1e30f};
+    for(auto& batch:model.batches) {
+        for(auto& vertex:batch.vertices)vertex.position.y=sample(vertex.position.x,vertex.position.z);
+        for(size_t i=0;i+2<batch.vertices.size();i+=3) {auto& a=batch.vertices[i];auto& b=batch.vertices[i+1];auto& c=batch.vertices[i+2];auto n=normal(cross(b.position-a.position,c.position-a.position));a.normal=b.normal=c.normal=n;}
+        for(const auto& vertex:batch.vertices) {model.minimum.x=std::min(model.minimum.x,vertex.position.x);model.minimum.y=std::min(model.minimum.y,vertex.position.y);model.minimum.z=std::min(model.minimum.z,vertex.position.z);model.maximum.x=std::max(model.maximum.x,vertex.position.x);model.maximum.y=std::max(model.maximum.y,vertex.position.y);model.maximum.z=std::max(model.maximum.z,vertex.position.z);}
+    }
+}
 void SceneView::load_scene() {
     destroy_meshes();rebuild=false;std::vector<std::string> issues;std::map<std::string,unsigned> texture_cache;
     auto root=std::filesystem::path(app.asset_root());base_key=terrain_name(app.doc.mesh());water_key=app.doc.mesh(true).empty()?"":terrain_name(app.doc.mesh(true));
@@ -111,7 +136,7 @@ void SceneView::load_scene() {
         auto path=m3d::resolve(root,name);
         if(path.empty()) {issues.push_back("Missing mesh: "+name);continue;}
         try {
-            auto model=m3d::Model::open(path);auto& asset=assets[name];asset.mesh=std::move(model);
+            auto model=m3d::Model::open(path);if(name==base_key)apply_heightmap(model);auto& asset=assets[name];asset.mesh=std::move(model);
             for(auto& batch:asset.mesh.batches) {
                 GpuBatch gpu;bool keying=((batch.flags|m3d::render_flags(name))&16)!=0;
                 gpu.translucent=name==water_key || ((batch.flags|m3d::render_flags(name))&1)!=0;
