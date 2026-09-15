@@ -32,11 +32,12 @@ if(animateWater){
 gl_Position=mvp*vec4(p,1);n=mat3(model)*surfaceNormal;world=(model*vec4(p,1)).xyz;
 })";
     const char* fragment=R"(#version 430 core
-in vec2 uv;in vec3 n;in vec3 world;uniform sampler2D shadowMap;uniform vec2 shadowSize;uniform bool useShadows;uniform int spritePass;uniform sampler2D image;uniform vec3 tint;uniform float opacity;out vec4 color;
+in vec2 uv;in vec3 n;in vec3 world;uniform sampler2D shadowMap;uniform vec2 shadowSize;uniform bool useShadows;uniform bool doubleSided;uniform int spritePass;uniform sampler2D image;uniform vec3 tint;uniform float opacity;out vec4 color;
 void main(){vec4 tex=texture(image,uv);if(tex.a<0.45)discard;
 if(spritePass==1 && tex.a>.75)discard;
 if(spritePass==2 && tex.a<.75)discard;
-float light=length(n)<0.1?1.0:0.45+0.55*max(0.0,dot(normalize(n),normalize(vec3(.3,1,.4))));
+vec3 surface=doubleSided && !gl_FrontFacing?-n:n;
+float light=length(surface)<0.1?1.0:0.45+0.55*max(0.0,dot(normalize(surface),normalize(vec3(.3,1,.4))));
 float visibility=1.0;
 if(useShadows){
     // SHD is an occluder-height grid in world units, not an opacity image.
@@ -159,6 +160,7 @@ void Renderer::load(const std::filesystem::path& file) {
         for(const auto& batch:a.cpu.batches) {
             Batch gpu;gpu.texture=white;unsigned flags=batch.flags|m3d::render_flags(path.filename().string());
             gpu.alpha=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.water=(flags&2)!=0;
+            gpu.double_sided=name!=terrain && name!=water;
             if(batch.material>=0) {
                 auto material=lower(a.cpu.textures.at(size_t(batch.material)));
                 // Windmill models keep the body and the sails in one M3D.  The
@@ -248,6 +250,7 @@ int Renderer::pick(const Battle& battle,float x,float y) const {
 void Renderer::render_batch(const Batch& b,const Mat4& model,const Mat4& vp,Vec3 tint,float opacity) {
     auto mvp=vp*model;glUseProgram(program);glUniformMatrix4fv(glGetUniformLocation(program,"mvp"),1,GL_FALSE,mvp.v);glUniformMatrix4fv(glGetUniformLocation(program,"model"),1,GL_FALSE,model.v);
     glUniform3f(glGetUniformLocation(program,"tint"),tint.x,tint.y,tint.z);glUniform1f(glGetUniformLocation(program,"opacity"),opacity);
+    glUniform1i(glGetUniformLocation(program,"doubleSided"),b.double_sided);
     glUniform1i(glGetUniformLocation(program,"animateWater"),b.water);
     glUniform1f(glGetUniformLocation(program,"waterTime"),float(water_time));
     glUniform1i(glGetUniformLocation(program,"useShadows"),scene_shadows && shadow_texture!=0);

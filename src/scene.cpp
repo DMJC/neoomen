@@ -30,11 +30,13 @@ in vec3 n;
 uniform sampler2D image;
 uniform float selected;
 uniform float opacity;
+uniform bool doubleSided;
 out vec4 color;
 void main() {
     vec4 tex=texture(image,uv);
     if(tex.a<0.45) discard;
-    float light=0.45+0.55*max(0.0,dot(normalize(n+vec3(0,0.00001,0)),normalize(vec3(0.3,1,0.4))));
+    vec3 surface=doubleSided && !gl_FrontFacing?-n:n;
+    float light=0.45+0.55*max(0.0,dot(normalize(surface+vec3(0,0.00001,0)),normalize(vec3(0.3,1,0.4))));
     color=vec4(mix(tex.rgb*light,vec3(1,0.72,0.12),selected*0.35),tex.a*opacity);
 }
 )";
@@ -72,7 +74,7 @@ void SceneView::on_realize() {
     if(has_error()) {info="OpenGL unavailable. Use the 2D terrain editor.";message.emit(info);return;}
     try {
         program=make_program();matrix_location=glGetUniformLocation(program,"mvp");model_location=glGetUniformLocation(program,"model");
-        tint_location=glGetUniformLocation(program,"selected");opacity_location=glGetUniformLocation(program,"opacity");uv_time_location=glGetUniformLocation(program,"uvTime");animate_uv_location=glGetUniformLocation(program,"animateUv");
+        tint_location=glGetUniformLocation(program,"selected");opacity_location=glGetUniformLocation(program,"opacity");uv_time_location=glGetUniformLocation(program,"uvTime");animate_uv_location=glGetUniformLocation(program,"animateUv");double_sided_location=glGetUniformLocation(program,"doubleSided");
         glUseProgram(program);glUniform1i(glGetUniformLocation(program,"image"),0);glUseProgram(0);
         glGenTextures(1,&white);glBindTexture(GL_TEXTURE_2D,white);const uint8_t pixel[]={210,205,190,255};
         glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
@@ -143,6 +145,7 @@ void SceneView::load_scene() {
                 GpuBatch gpu;bool keying=((batch.flags|m3d::render_flags(name))&16)!=0;
                 auto flags=batch.flags|m3d::render_flags(name);
                 gpu.translucent=(flags&(1|4))!=0;gpu.opacity=(flags&1)?.65f:1.f;gpu.animate_uv=(flags&2)!=0;animated_uv=animated_uv||gpu.animate_uv;
+                gpu.double_sided=name!=base_key && name!=water_key;
                 gpu.texture=white;
                 if(batch.material>=0) {
                     const auto& filename=asset.mesh.textures.at(size_t(batch.material));auto texture_file=m3d::texture_path(root,filename);
@@ -216,7 +219,7 @@ bool SceneView::on_render(const Glib::RefPtr<Gdk::GLContext>&) {
     }
     auto draw=[&](const Draw& d) {
         auto mvp=vp*d.model;glUniformMatrix4fv(matrix_location,1,GL_FALSE,mvp.v);glUniformMatrix4fv(model_location,1,GL_FALSE,d.model.v);
-        glUniform1f(tint_location,d.selected?1:0);glUniform1f(opacity_location,d.batch->opacity);
+        glUniform1f(tint_location,d.selected?1:0);glUniform1f(opacity_location,d.batch->opacity);glUniform1i(double_sided_location,d.batch->double_sided);
         glUniform1i(animate_uv_location,d.batch->animate_uv);glUniform1f(uv_time_location,float(g_get_monotonic_time()/1000000.0));
         glBindTexture(GL_TEXTURE_2D,d.batch->texture);glBindVertexArray(d.batch->vao);glDrawArrays(GL_TRIANGLES,0,d.batch->count);
     };

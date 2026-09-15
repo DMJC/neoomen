@@ -26,13 +26,13 @@ protected:
     bool on_scroll_event(GdkEventScroll*) override;
     bool on_key_press_event(GdkEventKey*) override;
 private:
-    struct GpuBatch {unsigned vao=0,vbo=0,texture=0;int count=0;bool translucent=false,animate_uv=false;float opacity=1;m3d::Vec3 center;};
+    struct GpuBatch {unsigned vao=0,vbo=0,texture=0;int count=0;bool translucent=false,animate_uv=false,double_sided=false;float opacity=1;m3d::Vec3 center;};
     struct Asset {m3d::Model mesh;std::vector<GpuBatch> batches;};
     Editor& app;
     std::map<std::string,Asset> assets;
     std::vector<unsigned> textures;
     unsigned program=0,white=0;
-    int matrix_location=-1,model_location=-1,tint_location=-1,opacity_location=-1,uv_time_location=-1,animate_uv_location=-1;
+    int matrix_location=-1,model_location=-1,tint_location=-1,opacity_location=-1,uv_time_location=-1,animate_uv_location=-1,double_sided_location=-1;
     bool rebuild=true,auto_fit=true;
     std::string key,camera_key,base_key,water_key,info;
     uint64_t heightmap_key=0;

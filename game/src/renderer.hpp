@@ -40,7 +40,7 @@ public:
     float radius=90;
     size_t triangles=0;
 private:
-    struct Batch {GLuint vao=0,vbo=0,texture=0;GLsizei count=0;bool alpha=false,water=false,rotor=false,hidden=false;float opacity=1;math3d::Vec3 center;};
+    struct Batch {GLuint vao=0,vbo=0,texture=0;GLsizei count=0;bool alpha=false,water=false,rotor=false,hidden=false,double_sided=false;float opacity=1;math3d::Vec3 center;};
     struct Asset {m3d::Model cpu;std::vector<Batch> gpu;};
     struct Sprite {UnitAnimation animation;std::vector<SpriteFrame> frames;std::vector<GLuint> gpu;};
     std::map<unsigned,Sprite> sprites;
