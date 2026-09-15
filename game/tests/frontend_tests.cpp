@@ -13,7 +13,7 @@ int main(int argc,char** argv){try{
     {
         neo::CursorTheme cursors(argv[1]);
         cursors.update("SELECT",false,0);auto system_cursor=SDL_GetCursor();
-        for(auto name:{"SELECT","HAND","HAND3","MOVE","SWORD","ROTATE","SELL","STAFF","POINT","HGLASS"}){
+        for(auto name:{"POINT","SELECT","ARROW","STAFF","MOVE","SWORD","ROTATE","STAFF2","ARROW2","HGLASS","HAND2","HAND3","ARROW3","STAFF3","ARROW1","HORN","DISPEL","BIN","HAND","SELL","HAND4"}){
             cursors.update(name,true,0);check(SDL_GetCursor()!=system_cursor,"Original colour cursor loaded");auto first=SDL_GetCursor();
             cursors.update(name,true,180);if(std::string(name)=="MOVE" || std::string(name)=="SWORD")check(SDL_GetCursor()!=first,"ANI timing advances colour cursor frame");
         }
@@ -78,6 +78,15 @@ int main(int argc,char** argv){try{
         renderer.draw(battle,false);ui.battle_draw(battle,false);check(glGetError()==GL_NO_ERROR,"Deployment HUD rendering");renderer.screenshot("/tmp/neoomen-selected-hud.bmp");
         click.button.x=790;click.button.y=407;check(ui.battle_event(battle,click) && battle.phase==neo::Phase::Battle,"Start battle button");
         check(!ui.covers_battle(battle,{125,460,0}) && ui.covers_battle(battle,{535,380,0}),"Only occupied HUD areas intercept battlefield input");
+        // The documented 33--81 world-unit ring selects the turn-to-face cursor.
+        int rotate_x=0,rotate_y=0;for(int y=40;y<390 && !rotate_x;y+=3)for(int x=40;x<920 && !rotate_x;x+=3){
+            math3d::Vec3 point;auto logical=renderer.ui_mouse(float(x),float(y));float d=0;
+            if(renderer.ground(float(x),float(y),point) && !ui.covers_battle(battle,logical)){d=std::hypot(point.x-battle.units[0].position.x,point.z-battle.units[0].position.z);if(d>=36 && d<=76 && renderer.pick(battle,float(x),float(y))<0){rotate_x=x;rotate_y=y;}}
+        }
+        check(rotate_x && ui.battle_cursor(battle,rotate_x,rotate_y,false,false)=="ROTATE","Original rotate cursor range");
+        float heading=battle.units[0].heading;click.button.x=rotate_x;click.button.y=rotate_y;check(ui.battle_event(battle,click),"Begin turn-to-face drag");
+        motion.motion.x=rotate_x+6;motion.motion.y=rotate_y+3;check(ui.battle_event(battle,motion) && battle.units[0].heading!=heading,"Facing follows cursor drag");
+        release.button.x=motion.motion.x;release.button.y=motion.motion.y;check(ui.battle_event(battle,release) && !battle.units[0].moving,"Facing release keeps unit in place");
         battle.units[0].regiment.missile_weapon=10;battle.units[0].regiment.stats[2]=10;battle.units[0].regiment.stats[3]=10;
         for(size_t i=0;i<battle.units.size();++i)if(battle.units[i].enemy){battle.units[0].position={0,0,0};battle.units[0].destination=battle.units[0].position;battle.units[i].position={35,0,0};battle.units[i].destination=battle.units[i].position;break;}
         check(battle.command(neo::UnitCommand::Shoot),"Shoot command launches ranged attack");battle.tick();check(!battle.projectiles.empty(),"Ranged projectile in flight");

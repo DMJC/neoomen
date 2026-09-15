@@ -175,16 +175,12 @@ int main(int argc,char** argv) {
                 }
                 if(event.type==SDL_MOUSEWHEEL)renderer.zoom(float(event.wheel.y)*(event.wheel.direction==SDL_MOUSEWHEEL_FLIPPED?-1:1));
                 if(event.type==SDL_MOUSEMOTION && (event.motion.state&SDL_BUTTON_MMASK))renderer.orbit(float(event.motion.xrel),float(event.motion.yrel));
-                if(event.type==SDL_MOUSEBUTTONDOWN && (!campaign || campaign->state==neo::CampaignState::Mission)) {
+                if(event.type==SDL_MOUSEBUTTONDOWN && event.button.button==SDL_BUTTON_RIGHT && (!campaign || campaign->state==neo::CampaignState::Mission)) {
                     int hit=renderer.pick(battle,float(event.button.x),float(event.button.y));
-                    if(event.button.button==SDL_BUTTON_LEFT) {
-                        if(!(SDL_GetModState()&KMOD_SHIFT))for(auto& unit:battle.units)unit.selected=false;
-                        if(hit>=0)battle.units[size_t(hit)].selected=true;
-                    }
-                    if(event.button.button==SDL_BUTTON_RIGHT) {
-                        math3d::Vec3 point;
-                        if(renderer.ground(float(event.button.x),float(event.button.y),point)){game_ui.order_feedback(battle.order(point,hit>=0 && battle.units[size_t(hit)].enemy?hit:-1));audio.cue();}
-                    }
+                    math3d::Vec3 point;
+                    if(hit>=0)point=battle.units[size_t(hit)].destination;
+                    else if(!renderer.ground(float(event.button.x),float(event.button.y),point))continue;
+                    renderer.center_on(point);
                 }
             }
             if(!running)break;
@@ -210,24 +206,9 @@ int main(int argc,char** argv) {
             else {game_ui.battle_draw(battle,paused);if(campaign && (battle.phase==neo::Phase::Victory || battle.phase==neo::Phase::Defeat))renderer.overlay("BATTLE COMPLETE",{"ENTER TO CONTINUE CAMPAIGN / R RETRY"});}
             if(!script_error.empty())renderer.overlay("CTL EXECUTION STOPPED",{script_error,"R RETRY / F9 RESTORE CAMPAIGN / ESC MENU","--NO-CTL ENABLES THE SEPARATE SANDBOX MODE"});
             }
-            std::string cursor="SELECT";
             int mouse_x,mouse_y;auto buttons=SDL_GetMouseState(&mouse_x,&mouse_y);
-            if(!frontend.active() && (!campaign || campaign->state==neo::CampaignState::Mission)){
-                auto ui=renderer.ui_mouse(float(mouse_x),float(mouse_y));
-                if(buttons&SDL_BUTTON_MMASK)cursor="ROTATE";
-                else if(!game_ui.covers_battle(battle,ui)){
-                    int hit=renderer.pick(battle,float(mouse_x),float(mouse_y));
-                    bool selected=false;for(const auto& u:battle.units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing)selected=true;
-                    if(hit>=0 && !battle.units[size_t(hit)].enemy)cursor="HAND";
-                    else if(selected){
-                        math3d::Vec3 point;
-                        if(!renderer.ground(float(mouse_x),float(mouse_y),point))cursor="HAND3";
-                        else if(battle.phase==neo::Phase::Deployment){cursor="MOVE";unsigned ordinal=0;for(const auto& u:battle.units)if(u.selected && !u.enemy && u.regiment.alive && !u.routing){if(!battle.can_deploy(math3d::Vec3{point.x+float(ordinal++)*7,point.y,point.z},u.regiment.alive))cursor="HAND3";}}
-                        else if(battle.phase==neo::Phase::Battle)cursor=hit>=0 && battle.units[size_t(hit)].enemy?"SWORD":"MOVE";
-                    }
-                }
-            }
-            if(game_ui.dragging() && !frontend.active())cursor=game_ui.valid_drop()?"MOVE":"HAND3";
+            std::string cursor="POINT";
+            if(!frontend.active() && (!campaign || campaign->state==neo::CampaignState::Mission))cursor=game_ui.battle_cursor(battle,mouse_x,mouse_y,(SDL_GetModState()&KMOD_SHIFT)!=0,(buttons&SDL_BUTTON_MMASK)!=0);
             cursors.update(cursor,frontend.colour_cursors,SDL_GetTicks64());
             audio.update();
             ++frames;

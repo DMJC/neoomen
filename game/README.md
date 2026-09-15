@@ -30,7 +30,7 @@ Normal startup plays `Movies/ENG.TGQ`, then `Movies/INTRO.TGQ`, and opens the ma
 
 The player uses FFmpeg libraries inside the SDL/OpenGL window: streamed demux/decode, RGBA video conversion, timestamp-based presentation, SDL stereo PCM audio, aspect-preserving letterboxing and resize handling. It does not launch an external player or preconvert files. M mutes movie audio while playback continues. Missing/unreadable startup movies fall back to the menu; an unavailable campaign movie leaves its prompt available to continue manually. The installed ENG movie has a malformed audio packet that is logged and discarded, as in FFmpeg's command-line decoder.
 
-Mouse or Up/Down + Enter selects menu items. New Campaign starts the existing campaign interpreter; Load Campaign uses the native checkpoint selected by `--save` and is disabled when no file exists. Options provides sound on/off and intro replay. Escape during gameplay opens this menu, pauses simulation, and exposes Continue. Quit closes the game. Multiplayer and Tutorial are visibly disabled; those modes are not implemented. Menu labels use the original `F_MENBG` and selected `F_MENBGR` bitmap fonts over the original background.
+Mouse or Up/Down + Enter selects menu items. New Campaign starts the existing campaign interpreter; Load Campaign uses the native checkpoint selected by `--save` and is disabled when no file exists. Options provides sound on/off and intro replay. Escape during gameplay opens this menu, pauses simulation, and exposes Continue. Quit closes the game. Multiplayer and Tutorial are visibly disabled; those modes are not implemented. Menu labels use the original `F_MENBG` and selected `F_MENBGR` bitmap fonts over the original background. The original cursor theme loads all 21 documented `Graphics/Cursors` resources, including ANI frame timing and CUR hotspots.
 
 ## Original assets
 
@@ -52,6 +52,10 @@ Controls:
 | Right click ground / enemy | Move / attack with selected friendly regiments |
 | Enter / 1 / 2 | Begin battle, continue campaign, choose a branch |
 | F5 / F9 | Save / restore campaign checkpoint |
+| Left click terrain | Move a selected unit; click an enemy to target it |
+| Left drag at 33–81 world units | Turn selected unit to face the cursor |
+| Shift + left drag | Turn selected unit to face the cursor at any distance |
+| Right click | Recenter camera on terrain or a unit's destination |
 | Middle drag | Orbit camera |
 | Mouse wheel | Zoom |
 | Arrow keys / F | Pan / fit map |

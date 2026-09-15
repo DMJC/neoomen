@@ -30,6 +30,7 @@ public:
     void orbit(float dx,float dy);
     void zoom(float amount);
     void pan(float right,float forward,float dt);
+    void center_on(math3d::Vec3);
     bool ground(float x,float y,math3d::Vec3&) const;
     float elevation(float x,float z) const;
     int pick(const Battle&,float x,float y) const;

@@ -111,13 +111,53 @@ void GameUi::update_drag(const Battle& battle,int x,int y){
         drag_mouse.x>=0 && drag_mouse.x<640 && drag_mouse.y>=20 && drag_mouse.y<317 &&
         renderer.ground(float(x),float(y),drag_point) && battle.can_deploy(drag_point,battle.units[size_t(drag_unit)].regiment.alive);
 }
+void GameUi::update_facing(Battle& battle,int x,int y){
+    if(facing_unit<0 || size_t(facing_unit)>=battle.units.size())return;
+    auto& unit=battle.units[size_t(facing_unit)];math3d::Vec3 point;
+    if(!renderer.ground(float(x),float(y),point))return;
+    // The original cursor drag supplies dx=cursorX-unitX and dz=unitZ-cursorZ
+    // to its 1024-step atan2 lookup table.
+    unit.heading=std::atan2(point.x-unit.position.x,unit.position.z-point.z);
+}
 bool GameUi::covers_battle(const Battle& battle,Vec3 p) const {
     if(hit(p,0,0,640,20) || hit(p,132,338,85,110) || magic_button.contains(p))return true;
     for(unsigned i=0;i<4;++i)if(command_button(i).contains(p))return true;
     if(battle.phase==Phase::Deployment && (hit(p,8,335,110,135) || hit(p,510,317,120,20)))return true;
     return battle.voice_active && mission_portrait && hit(p,8,337,110,133);
 }
+std::string GameUi::battle_cursor(const Battle& battle,int x,int y,bool shift,bool middle) const {
+    if(middle || facing_unit>=0)return "ROTATE";
+    auto ui=renderer.ui_mouse(float(x),float(y));
+    if(covers_battle(battle,ui))return "SELECT";
+    if(dragging())return valid_drop()?"MOVE":"HAND3";
+    int hit=renderer.pick(battle,float(x),float(y));
+    if(hit>=0 && !battle.units[size_t(hit)].enemy && !shift)return "HAND";
+    const Unit* selected=nullptr;for(const auto& unit:battle.units)if(unit.selected && !unit.enemy && unit.regiment.alive && !unit.routing){selected=&unit;break;}
+    if(hit>=0 && battle.units[size_t(hit)].enemy && !shift)return selected?"SWORD":"SELECT";
+    if(!selected)return "SELECT";
+    math3d::Vec3 point;if(!renderer.ground(float(x),float(y),point))return "ARROW1";
+    if(battle.phase==Phase::Deployment){
+        unsigned ordinal=0;for(const auto& unit:battle.units)if(unit.selected && !unit.enemy && unit.regiment.alive && !unit.routing)
+            if(!battle.can_deploy(point+math3d::Vec3{float(ordinal++)*7,0,0},unit.regiment.alive))return "ARROW1";
+        return "MOVE";
+    }
+    float distance=std::hypot(point.x-selected->position.x,point.z-selected->position.z);
+    if(shift || (distance>=33 && distance<=81))return "ROTATE";
+    if(distance>81)return "MOVE";
+    return "SELECT";
+}
 bool GameUi::battle_event(Battle& battle,const SDL_Event& e){
+    if(facing_unit>=0){
+        if(e.type==SDL_QUIT){facing_unit=-1;SDL_CaptureMouse(SDL_FALSE);return false;}
+        if(e.type==SDL_WINDOWEVENT && (e.window.event==SDL_WINDOWEVENT_FOCUS_LOST || e.window.event==SDL_WINDOWEVENT_LEAVE)){facing_unit=-1;SDL_CaptureMouse(SDL_FALSE);return true;}
+        if(e.type==SDL_MOUSEMOTION){update_facing(battle,e.motion.x,e.motion.y);return true;}
+        if(e.type==SDL_MOUSEBUTTONUP && e.button.button==SDL_BUTTON_LEFT){
+            update_facing(battle,e.button.x,e.button.y);auto& unit=battle.units[size_t(facing_unit)];
+            unit.destination=unit.position;unit.moving=false;facing_unit=-1;SDL_CaptureMouse(SDL_FALSE);audio.cue();return true;
+        }
+        if(e.type==SDL_KEYDOWN && e.key.keysym.sym==SDLK_ESCAPE){facing_unit=-1;SDL_CaptureMouse(SDL_FALSE);return true;}
+        return true;
+    }
     if(drag_unit>=0){
         if(battle.phase!=Phase::Deployment || size_t(drag_unit)>=battle.units.size() || e.type==SDL_QUIT ||
            (e.type==SDL_WINDOWEVENT && (e.window.event==SDL_WINDOWEVENT_FOCUS_LOST || e.window.event==SDL_WINDOWEVENT_LEAVE))){cancel_drag();}
@@ -162,12 +202,23 @@ bool GameUi::battle_event(Battle& battle,const SDL_Event& e){
         if(left){notice=battle.command(commands[i])?"":"ORDER UNAVAILABLE";if(notice.empty())audio.cue();}
         return true;
     }
-    if(covers_battle(battle,p))return true;
-    if(left){for(size_t i=0;i<battle.units.size();++i){const auto& u=battle.units[i];if(!u.regiment.alive || !u.regiment.banner)continue;float x,y;if(renderer.project(u.position+math3d::Vec3{0,6,0},x,y) && hit(p,x-10,y-27,20,28)){
-                if(!(SDL_GetModState()&KMOD_SHIFT))for(auto& other:battle.units)other.selected=false;
-                battle.units[i].selected=true;begin_drag(battle,i,e);audio.cue();return true;
-            }}
-    }return false;
+    if(covers_battle(battle,p) || !left)return covers_battle(battle,p);
+    const bool shift=(SDL_GetModState()&KMOD_SHIFT)!=0;int target=renderer.pick(battle,float(e.button.x),float(e.button.y));
+    if(battle.phase==Phase::Deployment && target>=0 && !battle.units[size_t(target)].enemy){
+        if(!shift)for(auto& unit:battle.units)unit.selected=false;
+        battle.units[size_t(target)].selected=true;begin_drag(battle,size_t(target),e);audio.cue();return true;
+    }
+    if(target>=0 && !battle.units[size_t(target)].enemy && !shift){for(auto& unit:battle.units)unit.selected=false;battle.units[size_t(target)].selected=true;audio.cue();return true;}
+    math3d::Vec3 point;if(!renderer.ground(float(e.button.x),float(e.button.y),point))return false;
+    Unit* selected=nullptr;for(auto& unit:battle.units)if(unit.selected && !unit.enemy && unit.regiment.alive && !unit.routing){selected=&unit;break;}
+    if(!selected)return false;
+    if(battle.phase==Phase::Deployment){order_feedback(battle.order(point));if(notice.empty())audio.cue();return true;}
+    float distance=std::hypot(point.x-selected->position.x,point.z-selected->position.z);
+    if(shift || (distance>=33 && distance<=81)){
+        facing_unit=int(selected-&battle.units[0]);update_facing(battle,e.button.x,e.button.y);SDL_CaptureMouse(SDL_TRUE);return true;
+    }
+    if(distance>81){order_feedback(battle.order(point,target>=0 && battle.units[size_t(target)].enemy?target:-1));if(notice.empty())audio.cue();return true;}
+    return true;
 }
 std::string GameUi::mission_clip(const Regiment& unit,unsigned id){
     if(!executable || id>174)return {};

@@ -168,6 +168,7 @@ void Renderer::zoom(float amount) {distance=std::clamp(distance*std::pow(1.12f,-
 void Renderer::pan(float right,float forward,float dt) {
     auto b=camera_basis(eye(),target);Vec3 f=normal(Vec3{b.forward.x,0,b.forward.z});target=target+(b.right*right+f*forward)*(distance*.5f*dt);
 }
+void Renderer::center_on(Vec3 point) {target.x=point.x;target.z=point.z;}
 Mat4 Renderer::view_projection() const {
     int w,h;SDL_GetWindowSize(window,&w,&h);return perspective(.84f,float(std::max(1,w))/std::max(1,h),std::max(.02f,distance/10000),distance+radius*20)*look_at(eye(),target);
 }

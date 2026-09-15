@@ -8,7 +8,7 @@
 namespace neo {
 namespace {
 using Surface=std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)>;
-struct Timing {uint32_t rate=10;std::vector<uint32_t> rates,sequence;std::vector<SDL_Point> hotspots;};
+struct Timing {bool animated=false;uint32_t rate=10;std::vector<uint32_t> rates,sequence;std::vector<SDL_Point> hotspots;};
 SDL_Point hotspot(const prj::Bytes& b,size_t p,size_t size){
     if(size<22 || p>b.size() || size>b.size()-p || b[p]!=0 || b[p+2]!=2 || b[p+4]==0)throw std::runtime_error("Invalid CUR directory");
     int x=b[p+10]|(b[p+11]<<8),y=b[p+12]|(b[p+13]<<8);if(x>=32 || y>=32)throw std::runtime_error("Invalid cursor hotspot");return {x,y};
@@ -17,6 +17,7 @@ SDL_Point hotspot(const prj::Bytes& b,size_t p,size_t size){
 Timing timing(const std::filesystem::path& path){
     Timing out;if(path.empty())return out;auto b=read_file(path);
     if(b.size()<12 || std::memcmp(b.data(),"RIFF",4) || std::memcmp(b.data()+8,"ACON",4))throw std::runtime_error("Invalid ANI header");
+    out.animated=true;
     size_t end=size_t(prj::u32(b,4))+8;
     // Original ANI writers included the RIFF header in the recorded size.
     if(end==b.size()+8)end=b.size();
@@ -42,7 +43,10 @@ const std::vector<CursorTheme::Frame>& CursorTheme::load(const std::string& name
         if((image->w!=32 || image->h!=32) && (image->w!=64 || image->h!=64))throw std::runtime_error("Unsupported cursor sheet dimensions");
         auto animation=timing(m3d::resolve(root,"Graphics/Cursors/"+name+".ANI"));unsigned count=unsigned(image->w/32)*unsigned(image->h/32);
         SDL_Point static_hotspot{};auto cur=m3d::resolve(root,"Graphics/Cursors/"+name+".CUR");if(!cur.empty()){auto bytes=read_file(cur);static_hotspot=hotspot(bytes,0,bytes.size());}
-        if(animation.sequence.empty())for(unsigned i=0;i<count;++i)animation.sequence.push_back(i);
+        // A CUR selects one static image.  Only ANI resources use the complete
+        // colour-sheet frame sequence; otherwise a 64x64 sheet would incorrectly
+        // turn a static cursor such as HGLASS into a four-frame animation.
+        if(animation.sequence.empty())for(unsigned i=0;i<(animation.animated?count:1);++i)animation.sequence.push_back(i);
         SDL_SetColorKey(image.get(),SDL_TRUE,SDL_MapRGB(image->format,0,0,0));
         for(size_t i=0;i<animation.sequence.size();++i){unsigned index=animation.sequence[i];if(index>=count)throw std::runtime_error("ANI frame outside colour sheet");
             Surface frame(SDL_CreateRGBSurfaceWithFormat(0,32,32,32,SDL_PIXELFORMAT_RGBA32),SDL_FreeSurface);if(!frame)throw std::runtime_error(SDL_GetError());SDL_FillRect(frame.get(),nullptr,0);
