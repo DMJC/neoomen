@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 namespace neo {
+namespace { constexpr float menu_font_height=39.f; }
 Frontend::Frontend(SDL_Window* w,Renderer& r,const std::filesystem::path& data,const std::filesystem::path& checkpoint,bool muted):window(w),renderer(r),root(data),save(checkpoint),mute(muted){
     auto file=m3d::resolve(root,"Graphics/Pictures/MAINMENU.BMP");
     if(!file.empty()){
@@ -52,7 +53,7 @@ FrontAction Frontend::event(const SDL_Event& e){
         int w,h;SDL_GetWindowSize(window,&w,&h);float scale=std::min(w/640.f,h/480.f);if(scale<=0)return FrontAction::None;
         float x=((e.type==SDL_MOUSEMOTION?e.motion.x:e.button.x)-(w-640*scale)/2)/scale;
         float y=((e.type==SDL_MOUSEMOTION?e.motion.y:e.button.y)-(h-480*scale)/2)/scale;
-        for(int i=0;i<7;++i){float top=i==6?210.f:250.f+i*40;if(x>=160 && x<=480 && y>=top && y<top+28 && enabled(i)){selected=i;if(e.type==SDL_MOUSEBUTTONDOWN)return choose(i);}}
+        for(int i=0;i<7;++i){float top=(i==6?210.f:250.f+i*40)-menu_font_height;if(x>=160 && x<=480 && y>=top && y<top+28 && enabled(i)){selected=i;if(e.type==SDL_MOUSEBUTTONDOWN)return choose(i);}}
     }
     return FrontAction::None;
 }
@@ -62,7 +63,7 @@ FrontAction Frontend::draw(){
     auto menu_font=[&](bool selected){return m3d::resolve(root,selected?"Graphics/Fonts/F_MENBGR.FNT":"Graphics/Fonts/F_MENBG.FNT");};
     if(mode==Mode::Options){renderer.screen_font_label(menu_font(true),250,mute?"SOUND: OFF":"SOUND: ON");renderer.screen_font_label(menu_font(false),300,"ENTER / M TO TOGGLE SOUND");renderer.screen_font_label(menu_font(false),330,colour_cursors?"C CURSORS: ORIGINAL COLOUR":"C CURSORS: SYSTEM");renderer.screen_font_label(menu_font(false),365,"I REPLAY INTRO");renderer.screen_font_label(menu_font(false),410,"ESC BACK");}
     else {static const char* labels[]={"NEW CAMPAIGN","LOAD CAMPAIGN","MULTIPLAYER","TUTORIAL","OPTIONS","QUIT","CONTINUE"};
-        for(int i=0;i<7;++i){if(i==6 && !can_continue)continue;renderer.screen_font_label(menu_font(i==selected),i==6?210.f:250.f+i*40,labels[i]);}
+        for(int i=0;i<7;++i){if(i==6 && !can_continue)continue;renderer.screen_font_label(menu_font(i==selected),(i==6?210.f:250.f+i*40)-menu_font_height,labels[i]);}
         if(!message.empty())renderer.screen_label(185,message.substr(0,65),{1,.35f,.2f});
         else if(root.empty())renderer.screen_label(185,"START WITH --DATA GAME_ROOT TO PLAY",{1,.6f,.2f});
     }

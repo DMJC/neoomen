@@ -25,7 +25,7 @@ int main(int argc,char** argv){try{
         menu.menu();check(key(SDLK_l)==neo::FrontAction::None && menu.active(),"Unavailable load disabled");
         key(SDLK_DOWN);key(SDLK_RETURN);key(SDLK_m);check(!menu.muted(),"Options sound toggle");key(SDLK_c);check(!menu.colour_cursors,"Options cursor theme toggle");key(SDLK_ESCAPE);
         menu.draw();check(glGetError()==GL_NO_ERROR,"Menu rendering");
-        SDL_Event click{};click.type=SDL_MOUSEBUTTONDOWN;click.button.button=SDL_BUTTON_LEFT;click.button.x=480;click.button.y=320;
+        SDL_Event click{};click.type=SDL_MOUSEBUTTONDOWN;click.button.button=SDL_BUTTON_LEFT;click.button.x=480;click.button.y=275;
         check(menu.event(click)==neo::FrontAction::NewCampaign,"Mouse New Campaign");
         menu.intro();menu.draw();check(glGetError()==GL_NO_ERROR,"Movie rendering");key(SDLK_SPACE);
         check(menu.active() && key(SDLK_n)==neo::FrontAction::NewCampaign,"Skip splash goes to main menu");
