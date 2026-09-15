@@ -270,7 +270,7 @@ void Renderer::draw(const Battle& battle,bool paused) {
     auto draw_asset=[&](const std::string& name,const Mat4& model,unsigned phase=0) {
         auto it=assets.find(name);if(it==assets.end())return;
         for(const auto& b:it->second.gpu) {
-            auto transformed=b.rotor?model*rotate_about_x(b.center,float(water_time)*7.5f+float((phase*977)%512)*6.2831853f/512.f):model;
+            auto transformed=b.rotor?model*rotate_about_x(b.center,float(water_time)*1.875f+float((phase*977)%512)*6.2831853f/512.f):model;
             if(b.alpha)translucent.push_back({&b,transformed,length(transform(transformed,b.center)-eye())});else render_batch(b,transformed,vp,{1,1,1});
         }
     };
